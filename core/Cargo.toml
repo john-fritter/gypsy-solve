@@ -1,0 +1,9 @@
+[package]
+name = "gypsy-core"
+description = "Rules, state, move generation and seeded deals for two-deck Gypsy solitaire"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]

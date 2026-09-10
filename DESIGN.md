@@ -7,6 +7,11 @@ tableau ("worry-back").
 Secondary goal: a public writeup and an interactive page where a visitor can
 play a seeded deal and then find out whether it was ever winnable.
 
+This document is a starting point, not a fixed plan. `DECISIONS.md` records what
+the implementation actually settled on, what was rejected, and where reality has
+contradicted what is written here. When the two disagree, `DECISIONS.md` is
+newer and this file gets corrected.
+
 ## Why this is worth doing
 
 The reference work on solitaire winnability is Solvitaire (Blake & Gent), which
@@ -90,13 +95,16 @@ for this class of problem. Specifics for this game:
   and so are the two blacks, giving a 4x symmetry reduction for free. Two decks
   means duplicate cards are interchangeable too.
 - **Zobrist hashing**, fixed-size table with replacement. Memory is the binding
-  constraint, not CPU.
+  constraint, not CPU — and on the box that runs the batch it is tighter than
+  this originally assumed: about 1 GiB per worker, not one large table with the
+  host to itself. See *Where the batch runs* below.
 - **Dominances** cut more than any micro-optimization. But see the warning
   below.
 - **Node budget**, and report three outcomes: solvable, proven unsolvable,
   **unknown**. The honest third bucket is more credible than a forced binary,
   and how it shrinks as the budget rises is itself a result worth plotting.
-- Embarrassingly parallel across deals. One process per deal, one core each.
+- Embarrassingly parallel across deals. One process per deal, one core each,
+  with bounded concurrency — four workers on fritter.lol, not eight.
 
 ### Worry-back breaks things — handle deliberately
 
@@ -113,6 +121,25 @@ for this class of problem. Specifics for this game:
 If full worry-back search proves too expensive, a bounded version (cap the
 count, or only permit a worry-back that immediately unlocks a move) yields a
 valid **lower bound**. Never report a bounded result as exact.
+
+## Where the batch runs
+
+Measured on fritter.lol, 2026-09-10, and these numbers are design inputs rather
+than trivia:
+
+- 4 physical cores / 8 threads, shared with a live production stack that has to
+  stay up. Four workers is a ceiling to start from, revisited after measuring.
+- 15 GiB RAM, but only ~4.9 GiB available and swap nearly exhausted. Size the
+  transposition table from available memory and measure per-solve RSS before
+  running multiple workers.
+- Root filesystem 96% full, RAID0, no redundancy. Results written there are not
+  archival.
+
+Consequences for the CLI: bounded concurrency, per-deal records written
+incrementally, resume after a kill without redoing completed deals, a
+configurable output path, and a refusal to start or continue when free space
+runs low. Storage and memory provisioning is a prerequisite for a
+thousands-of-deals run, not something to resolve mid-run.
 
 ## Validation
 
@@ -171,6 +198,10 @@ than shipping one large bundle.
 - Confirm no published Gypsy winnability figure exists before claiming novelty.
 - Does the mobile app's shuffle look uniform? (Probably unanswerable without
   extracting deals from it — leave it out unless there's a clean way.)
+- Where does the full batch actually run? fritter.lol as it stands cannot host a
+  multi-day memory-bound run without freeing storage and memory first. Provision
+  the box, or find somewhere else for the big run and keep fritter.lol for
+  development and the site.
 
 ## Scope discipline
 

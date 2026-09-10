@@ -1,0 +1,15 @@
+[package]
+name = "gypsy-cli"
+description = "Command line front end for the Gypsy solitaire engine"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "gypsy"
+path = "src/main.rs"
+
+[dependencies]
+gypsy-core.workspace = true
+clap = { version = "4", features = ["derive"] }
