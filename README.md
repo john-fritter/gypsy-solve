@@ -2,7 +2,9 @@
 
 How often is two-deck Gypsy solitaire winnable, and how much of that depends on
 worrying back? `DESIGN.md` has the exact ruleset, the questions, and the build
-order; `CLAUDE.md` has the working constraints.
+order; `DECISIONS.md` records what the implementation settled on and why;
+`CLAUDE.md` has the working constraints. Reports from runs on the server are
+kept under `docs/reports/`.
 
 ## Layout
 

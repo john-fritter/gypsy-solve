@@ -2,9 +2,10 @@
 
 Working context for `github.com/john-fritter/gypsy-solve`.
 
-Design and rationale live in `DESIGN.md`. This file is stable context —
-architectural decisions, hard constraints, and how work gets divided. It is not
-a status log. Do not record current implementation state here.
+Design and rationale live in `DESIGN.md`; the running record of decisions lives
+in `DECISIONS.md`. This file is stable context — architectural decisions, hard
+constraints, and how work gets divided. It is not a status log. Do not record
+current implementation state here.
 
 ## What this is
 
@@ -86,6 +87,23 @@ structured results Gizmo can summarize without re-running anything.
   no re-requesting data already provided. Trust the reader's competence.
 - Correctness beats speed until Klondike validation passes. After that, speed
   is the whole game.
+
+## Documentation
+
+Three files, three jobs:
+
+- `DESIGN.md` — the plan and its rationale. A starting point, not carved in
+  stone. Correct it when reality contradicts it.
+- `DECISIONS.md` — append-only log of decisions: what was chosen, why, what was
+  rejected, and whether it is firm or provisional. **Every PR that makes a
+  non-obvious choice appends an entry.** A decision explained only in chat is a
+  decision that has been lost.
+- `CLAUDE.md` — this file. Stable context only.
+
+Rationale is part of the deliverable, not overhead. The writeup needs it, and
+anyone reading a dominance rule later needs to know what was already considered
+and rejected. Do not edit old entries to look right in hindsight — change the
+status and add a new entry explaining the reversal.
 
 ## Layout
 
