@@ -543,3 +543,45 @@ and each is a one-line change to test.
 The deal takes cards pile by pile rather than interleaving rows as a physical
 deal does. Both map a uniformly shuffled deck to a uniformly distributed
 position, and this one is easier to check.
+
+---
+
+## 2026-09-12 — Klondike validation: consistent, and too weak to be worth much
+
+**Status:** firm (a measurement)
+
+200 Klondike deals, 3M node budget, depth 400, one core. Raw results kept at
+`docs/results/klondike-3M-200deals.jsonl`; summarise with
+`analysis/klondike_validation.py`.
+
+| | Count | Share |
+|---|---|---|
+| solvable (each replayed to a win) | 76 | 38.0% |
+| unsolvable (each an exhaustive refutation) | 24 | 12.0% |
+| unknown | 100 | 50.0% |
+
+Every unknown was stopped by the node budget. Not one hit the depth limit, so
+depth 400 is not binding and the earlier worry about winning lines being longer
+than the limit was unfounded for Klondike.
+
+**What this establishes.** True winnability is at least the solvable rate and
+at most one minus the proven-unsolvable rate, which after widening for sampling
+error is **31.6% to 91.8%**. The published 81.945% sits inside. So does 50%,
+and so does 85%. A 60-point bracket is consistent with correctness and is not
+evidence of it.
+
+**The one part that does discriminate.** A proven-unsolvable verdict is
+exhaustive, so that rate can only ever be a lower bound on the true 18.06%. It
+came in at 12.0%, Wilson 95% [8.2%, 17.2%] — under the ceiling, with the top of
+the interval just below it. A search that refutes deals it should not would
+push through 18.06%, and this does not. It is a one-sided check and it passes.
+
+**What is not established.** Nothing rules out a solver that misses wins for a
+systematic reason rather than a budget reason. Half the sample is unknown, and
+until that shrinks the two look identical from here.
+
+**The blocker is the one already measured.** Every unknown is budget-capped,
+and the re-expansion cost recorded on 2026-09-11 says most of that budget goes
+on positions the search has already seen 20 to 57 times. That is the thing to
+fix, and Klondike now gives it a scoreboard: the bracket narrows as the search
+improves, and the published figure staying inside it is the regression test.
