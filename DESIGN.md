@@ -90,10 +90,27 @@ number, and every published claim should be replayable.
 Depth-first backtracking with a transposition table is the approach that works
 for this class of problem. Specifics for this game:
 
-- **Canonicalization.** The 8 tableau columns are unordered — hash on sorted
-  columns. With alternating-color rules the two red suits are interchangeable
-  and so are the two blacks, giving a 4x symmetry reduction for free. Two decks
-  means duplicate cards are interchangeable too.
+- **Canonicalization, gated on the stock.** Two reductions this document
+  originally claimed unconditionally are only sound once the stock is empty,
+  because the stock deal sends card *i* to column *i*:
+
+  | Reduction | Sound when |
+  |---|---|
+  | Remaining stock encoded as its **length** alone | always |
+  | The two foundation slots of a suit sorted | always |
+  | Tableau columns sorted | **stock empty only** |
+  | Red-red and black-black suit swap | **stock empty only** |
+
+  Column order is load-bearing while cards remain undealt: two positions
+  identical up to a permutation of columns receive *different* cards on the
+  next stock deal, so merging them in the table is wrong. The suit swap fails
+  for the same reason — it does not apply to the 80 undealt cards, so the
+  swapped position belongs to a different deal. Both hold again once the stock
+  runs out, which is where most of the search sits, so both are worth having
+  behind the gate. See `DECISIONS.md`, 2026-09-11.
+
+  Duplicate cards *are* interchangeable everywhere, since the two decks are
+  indistinguishable.
 - **Zobrist hashing**, fixed-size table with replacement. Memory is the binding
   constraint, not CPU — and on the box that runs the batch it is tighter than
   this originally assumed: about 1 GiB per worker, not one large table with the
@@ -153,13 +170,29 @@ budget-exhausted.
 
 ## Build order
 
-1. Rust engine + CLI. Seeded deal, apply move, detect win, dump state.
-2. **Debug visualizer, early.** Not a game — a way to render a state and step
-   through a move list. Terminal TUI or static HTML dump is fine. Watching the
-   search make obviously stupid moves is how the bad dominance gets found.
-3. No-worry-back solver. Klondike validation run.
-4. Batch runs. Worry-back enabled. Analysis + writeup.
-5. WASM front end, last.
+1. **Done.** Rust engine + CLI. Seeded deal, apply move, detect win, dump state.
+2. **Done.** Debug visualizer. Not a game — a way to render a state and step
+   through a move list. `gypsy replay --step` covers it; the solver feeds it a
+   line via `--trace`. Watching the search make obviously stupid moves is how
+   the bad dominance gets found.
+3. **Baseline solver.** No-worry-back DFS, transposition table, three-valued
+   result, no dominances. Deliberately weak: it is the control that every later
+   cut gets measured against, and it is expected to return mostly `unknown`.
+4. **Klondike validation**, before any dominance work rather than after. It is
+   the only independent check on whether the search is correct, so a slow
+   solver and a broken one stay distinguishable. Must reproduce ~81.9%.
+5. **Dominances**, one per PR, each with a proof that it cannot discard a
+   winning line, each measured against step 3's baseline.
+6. Batch runner, then batch runs. Worry-back enabled. Analysis + writeup.
+7. WASM front end, last.
+
+Measurements taken 2026-09-11 against a throwaway prototype, which is why
+step 5 is on the critical path rather than filed as optimization: a naive DFS
+with no dominances solved none of twelve deals at 500k nodes, and none of three
+at 10M nodes (~40s and ~2 GiB of table each). Weighted-greedy rollouts reached
+21-51 of 104 foundation cards and never won. Neither result says the deals are
+unwinnable; they say a naive search is not close, and that nothing yet tells us
+whether the search is even correct — hence step 4.
 
 ## Front end
 

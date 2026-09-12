@@ -189,3 +189,72 @@ does not get treated as settled.
 Process note from the same day: the repo was initialised by pushing a feature
 branch first, which made GitHub adopt that branch as the default and forced a
 manual fix. On a fresh empty repo, push the default branch first.
+
+---
+
+## 2026-09-11 — Canonicalisation is gated on an empty stock
+
+**Status:** firm
+
+`DESIGN.md` claimed the transposition key could sort the tableau columns, and
+could fold the two red suits together and the two blacks together for "a 4x
+symmetry reduction for free". Both are wrong while the stock still holds cards,
+and both are now gated on the stock being empty.
+
+The stock deal sends card *i* to column *i*. Column identity therefore decides
+who receives what next, and two positions that are identical as a multiset of
+columns are not equivalent: deal seed 7, swap columns 0 and 1, apply `S` to
+both, and the two positions differ up to column order. Merging them in the
+table would discard a genuinely different future.
+
+The suit swap fails by the same argument. Applying H↔D to a position does not
+apply it to the 80 undealt cards, so the swapped position is a position from a
+*different* deal. It is an isomorphism of the game, not of this deal.
+
+Sound unconditionally, and kept:
+
+- The remaining stock is encoded as its **length** alone. Nothing in the rules
+  ever returns a card to the stock, so for a fixed seed the length determines
+  the remaining sequence exactly. Eighty bytes of key become one. (The table is
+  per-deal, which is what makes this valid.)
+- The two foundation slots of a suit are interchangeable and get sorted in the
+  key. They are rank counters; the stock does not distinguish them.
+
+Sound only once the stock is empty, and applied behind that gate: sorting
+columns, and the suit swap. That is not a small window — the search spends most
+of its nodes after the last deal — but it needs the gate and it needs a test
+that fails if the gate is removed.
+
+**Why this is recorded at length:** it is the exact failure this project is
+most exposed to. It does not crash and it does not look wrong. It merges two
+positions with different futures, loses the branch holding the only solution,
+and reports a winnable deal as unsolvable — and the published percentage is
+quietly too low. Both throwaway prototypes written on 2026-09-11 used the
+unsound sorted-column key before this was noticed.
+
+---
+
+## 2026-09-11 — Klondike validation comes before dominance work
+
+**Status:** firm
+
+Build order is: baseline solver, then Klondike validation, then dominances one
+at a time. `DESIGN.md` previously implied dominance work could proceed in
+parallel with validation.
+
+Measurement forced the question. A naive DFS solved none of twelve deals at
+500k nodes and none of three at 10M nodes. That leaves two indistinguishable
+explanations — the search is wrong, or two-deck Gypsy is simply hard — and no
+amount of dominance work separates them. Klondike does: the answer is known to
+be ~81.9%, and a correct solver reaches it quickly. Tuning an unvalidated
+search means a dominance bug and a search bug look the same, and the first
+symptom of either is a wrong published number.
+
+**Consequence:** the baseline solver keeps its search loop free of Gypsy
+specifics, so extracting a game trait for Klondike is mechanical. The trait
+itself is not written until Klondike needs it — one implementation is not
+enough evidence to design an abstraction around.
+
+**Rejected:** writing the solver against Klondike first, where the right answer
+is known throughout. It is the most rigorous order and the slowest to a Gypsy
+number, and the baseline is needed anyway as the control for dominance work.
