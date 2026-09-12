@@ -7,7 +7,8 @@ use std::process::ExitCode;
 
 use clap::{Args, Parser, Subcommand};
 use gypsy_core::{parse_move_list, Move, MoveOptions, State};
-use gypsy_solver::{solve, Config, Limit, Report, Verdict};
+use gypsy_solver::{solve, Config, Gypsy, Limit, Report, Verdict};
+use klondike::{Klondike, Position};
 
 #[derive(Parser)]
 #[command(name = "gypsy", version, about = "Two-deck Gypsy solitaire engine")]
@@ -26,6 +27,8 @@ enum Command {
     Replay(ReplayArgs),
     /// Search a seeded deal for a winning line.
     Solve(SolveArgs),
+    /// Solve Klondike deals, to validate the solver against a known figure.
+    Klondike(KlondikeArgs),
 }
 
 #[derive(Args)]
@@ -90,6 +93,25 @@ struct SolveArgs {
     json: bool,
 }
 
+#[derive(Args)]
+struct KlondikeArgs {
+    /// First deal number.
+    #[arg(long, default_value_t = 0)]
+    seed: u64,
+    /// How many consecutive deals to solve.
+    #[arg(long, default_value_t = 1)]
+    deals: u64,
+    #[arg(long, default_value_t = 10_000_000)]
+    budget: u64,
+    #[arg(long, default_value_t = 400)]
+    max_depth: u32,
+    #[arg(long, default_value_t = 256)]
+    table_mib: usize,
+    /// One JSON object per deal instead of a human-readable line.
+    #[arg(long)]
+    json: bool,
+}
+
 fn main() -> ExitCode {
     let cli = Cli::parse();
     match run(cli) {
@@ -146,20 +168,57 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
                 if state.is_won() { "won" } else { "not won" }
             )?;
         }
-        Command::Solve(args) => {
+        Command::Klondike(args) => {
             let config = Config {
-                options: if args.no_worry_back {
-                    MoveOptions::NO_WORRY_BACK
-                } else {
-                    MoveOptions::ALL
-                },
                 node_budget: args.budget,
                 max_depth: args.max_depth,
                 table_entries: gypsy_solver::Table::entries_in(args.table_mib << 20),
             };
+            let game = Klondike::new();
+
+            for seed in args.seed..args.seed + args.deals {
+                let report = solve(&game, &Position::deal(seed), config)?;
+                if args.json {
+                    writeln!(
+                        out,
+                        concat!(
+                            r#"{{"game":"klondike","seed":{},"verdict":"{}","limit":"{}","#,
+                            r#""nodes":{},"line_length":{},"elapsed_ms":{}}}"#
+                        ),
+                        seed,
+                        verdict_name(report.verdict),
+                        limit_name(report.limit),
+                        report.nodes,
+                        report.line.as_ref().map_or(0, |line| line.len()),
+                        report.elapsed.as_millis(),
+                    )?;
+                } else {
+                    writeln!(
+                        out,
+                        "seed {seed:6}  {:11}  nodes {:9}  {:6.2}s",
+                        verdict_name(report.verdict),
+                        report.nodes,
+                        report.elapsed.as_secs_f64()
+                    )?;
+                }
+                // Long runs are piped into a collector, so do not make it wait.
+                out.flush()?;
+            }
+        }
+        Command::Solve(args) => {
+            let config = Config {
+                node_budget: args.budget,
+                max_depth: args.max_depth,
+                table_entries: gypsy_solver::Table::entries_in(args.table_mib << 20),
+            };
+            let game = Gypsy::new(if args.no_worry_back {
+                MoveOptions::NO_WORRY_BACK
+            } else {
+                MoveOptions::ALL
+            });
 
             let state = State::deal(args.seed);
-            let report = solve(&state, config)?;
+            let report = solve(&game, &state, config)?;
 
             if let (Some(path), Some(line)) = (&args.trace, &report.line) {
                 let text: Vec<String> = line.iter().map(|mv| mv.to_string()).collect();
@@ -205,7 +264,7 @@ fn write_report(
     out: &mut impl Write,
     seed: u64,
     args: &SolveArgs,
-    report: &Report,
+    report: &Report<Move>,
 ) -> io::Result<()> {
     writeln!(
         out,
@@ -238,7 +297,7 @@ fn write_report(
 }
 
 /// A flat JSON object, one per deal, for the batch runner to collect.
-fn json_report(seed: u64, args: &SolveArgs, report: &Report) -> String {
+fn json_report(seed: u64, args: &SolveArgs, report: &Report<Move>) -> String {
     let line = match &report.line {
         Some(line) => format!(
             "\"{}\"",

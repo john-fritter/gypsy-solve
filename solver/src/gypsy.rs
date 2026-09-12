@@ -1,4 +1,7 @@
-//! The transposition key.
+//! Gypsy as the search sees it: the transposition key, the move ordering, and
+//! the [`Game`] implementation that ties them to `gypsy_core`.
+//!
+//! # The transposition key
 //!
 //! Two positions get the same key only when they have the same future. That is
 //! a narrower claim than "they look alike", and the difference is where this
@@ -27,7 +30,9 @@
 use gypsy_core::card::{RANKS, SUITS};
 use gypsy_core::rng::SplitMix64;
 use gypsy_core::state::{COLUMNS, DECK_SIZE, STOCK_AT_DEAL};
-use gypsy_core::{Card, State};
+use gypsy_core::{Card, Move, MoveOptions, State};
+
+use crate::game::Game;
 
 /// Deepest column the keys cover. A column cannot exceed the whole deck.
 const MAX_COLUMN_DEPTH: usize = DECK_SIZE;
@@ -121,6 +126,69 @@ impl Zobrist {
 impl Default for Zobrist {
     fn default() -> Zobrist {
         Zobrist::new()
+    }
+}
+
+/// Gypsy under a chosen ruleset.
+///
+/// `options` decides whether the search may worry back. It is a property of
+/// the game being searched rather than a search limit, which is what makes the
+/// no-worry-back figure a restricted search of the same game rather than a
+/// second ruleset.
+pub struct Gypsy {
+    zobrist: Zobrist,
+    options: MoveOptions,
+}
+
+impl Gypsy {
+    pub fn new(options: MoveOptions) -> Gypsy {
+        Gypsy {
+            zobrist: Zobrist::new(),
+            options,
+        }
+    }
+}
+
+impl Game for Gypsy {
+    type Position = State;
+    type Action = Move;
+
+    /// Rules-legal moves, reordered. Nothing is dropped: reordering cannot
+    /// cost a solution, whereas dropping a move needs an argument.
+    fn legal_actions(&self, position: &State) -> Vec<Move> {
+        let mut moves = position.legal_moves(self.options);
+        moves.sort_by_key(|mv| match *mv {
+            Move::ToFoundation { .. } => 0u8,
+            Move::Tableau { from, to, count } => {
+                let source = &position.columns[from as usize];
+                let takes_all = count as usize == source.len();
+                let onto_empty = position.columns[to as usize].is_empty();
+                if source.hidden() > 0 && count as usize == source.len() - source.hidden() {
+                    1 // turns up a buried card
+                } else if takes_all && !onto_empty {
+                    2 // empties a column
+                } else if takes_all && onto_empty {
+                    6 // a relabelling of the position, and nothing more
+                } else {
+                    3
+                }
+            }
+            Move::Stock => 4,
+            Move::WorryBack { .. } => 5,
+        });
+        moves
+    }
+
+    fn apply(&self, position: &mut State, action: Move) -> Result<(), String> {
+        position.apply(action).map_err(|error| error.to_string())
+    }
+
+    fn is_won(&self, position: &State) -> bool {
+        position.is_won()
+    }
+
+    fn key(&self, position: &State) -> u128 {
+        self.zobrist.key(position)
     }
 }
 

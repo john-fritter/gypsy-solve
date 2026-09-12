@@ -109,11 +109,18 @@ status and add a new entry explaining the reversal.
 
 ```
 core/      rules, state, move generation, seeded deals
-solver/    search, transposition table, dominances
+solver/    game trait, search, transposition table, dominances
+klondike/  Klondike, for validating the solver. Not part of the deliverable
 cli/       batch runner, single-deal solve, replay dump
 analysis/  stats, plots, writeup source
 web/       WASM bindings + front end (last)
 ```
+
+`klondike/` is separate from `core/` on purpose: `core/` is the one
+implementation of the Gypsy rules and is what compiles to WASM, and a game
+nobody plays on the site does not belong in that payload. The solver is generic
+over a `Game` trait so that the search validated against Klondike is literally
+the search that publishes the Gypsy numbers.
 
 ## Deployment
 

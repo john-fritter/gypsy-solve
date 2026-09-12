@@ -181,6 +181,10 @@ budget-exhausted.
 4. **Klondike validation**, before any dominance work rather than after. It is
    the only independent check on whether the search is correct, so a slow
    solver and a broken one stay distinguishable. Must reproduce ~81.9%.
+   Implemented in `klondike/`, against the same `Game` trait the Gypsy side
+   uses, so the search under test is the search that publishes. The variant is
+   the one the published figure was measured on: 24-card stock drawn three at a
+   time, redeals without limit, worry-back permitted.
 5. **Dominances**, one per PR, each with a proof that it cannot discard a
    winning line, each measured against step 3's baseline.
 6. Batch runner, then batch runs. Worry-back enabled. Analysis + writeup.
