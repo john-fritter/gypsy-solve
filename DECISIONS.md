@@ -189,3 +189,249 @@ does not get treated as settled.
 Process note from the same day: the repo was initialised by pushing a feature
 branch first, which made GitHub adopt that branch as the default and forced a
 manual fix. On a fresh empty repo, push the default branch first.
+
+---
+
+## 2026-09-11 — Canonicalisation is gated on an empty stock
+
+**Status:** firm
+
+`DESIGN.md` claimed the transposition key could sort the tableau columns, and
+could fold the two red suits together and the two blacks together for "a 4x
+symmetry reduction for free". Both are wrong while the stock still holds cards,
+and both are now gated on the stock being empty.
+
+The stock deal sends card *i* to column *i*. Column identity therefore decides
+who receives what next, and two positions that are identical as a multiset of
+columns are not equivalent: deal seed 7, swap columns 0 and 1, apply `S` to
+both, and the two positions differ up to column order. Merging them in the
+table would discard a genuinely different future.
+
+The suit swap fails by the same argument. Applying H↔D to a position does not
+apply it to the 80 undealt cards, so the swapped position is a position from a
+*different* deal. It is an isomorphism of the game, not of this deal.
+
+Sound unconditionally, and kept:
+
+- The remaining stock is encoded as its **length** alone. Nothing in the rules
+  ever returns a card to the stock, so for a fixed seed the length determines
+  the remaining sequence exactly. Eighty bytes of key become one. (The table is
+  per-deal, which is what makes this valid.)
+- The two foundation slots of a suit are interchangeable and get sorted in the
+  key. They are rank counters; the stock does not distinguish them.
+
+Sound only once the stock is empty, and applied behind that gate: sorting
+columns, and the suit swap. That is not a small window — the search spends most
+of its nodes after the last deal — but it needs the gate and it needs a test
+that fails if the gate is removed.
+
+**Why this is recorded at length:** it is the exact failure this project is
+most exposed to. It does not crash and it does not look wrong. It merges two
+positions with different futures, loses the branch holding the only solution,
+and reports a winnable deal as unsolvable — and the published percentage is
+quietly too low. Both throwaway prototypes written on 2026-09-11 used the
+unsound sorted-column key before this was noticed.
+
+---
+
+## 2026-09-11 — Klondike validation comes before dominance work
+
+**Status:** firm
+
+Build order is: baseline solver, then Klondike validation, then dominances one
+at a time. `DESIGN.md` previously implied dominance work could proceed in
+parallel with validation.
+
+Measurement forced the question. A naive DFS solved none of twelve deals at
+500k nodes and none of three at 10M nodes. That leaves two indistinguishable
+explanations — the search is wrong, or two-deck Gypsy is simply hard — and no
+amount of dominance work separates them. Klondike does: the answer is known to
+be ~81.9%, and a correct solver reaches it quickly. Tuning an unvalidated
+search means a dominance bug and a search bug look the same, and the first
+symptom of either is a wrong published number.
+
+**Consequence:** the baseline solver keeps its search loop free of Gypsy
+specifics, so extracting a game trait for Klondike is mechanical. The trait
+itself is not written until Klondike needs it — one implementation is not
+enough evidence to design an abstraction around.
+
+**Rejected:** writing the solver against Klondike first, where the right answer
+is known throughout. It is the most rigorous order and the slowest to a Gypsy
+number, and the baseline is needed anyway as the control for dominance work.
+
+---
+
+## 2026-09-11 — The table separates refutation from abandonment
+
+**Status:** firm
+
+A transposition entry records either that a position was searched to
+exhaustion and lost (**refuted**), or that the search gave up on it with a
+recorded amount of depth in hand (**abandoned**). A probe reuses a refutation
+at any depth; it reuses an abandonment only for a visit with no more depth to
+spend than the visit that recorded it, and a caller that skips on one must
+report `unknown`.
+
+Collapsing the two is the bug that turns an exhausted budget into a confident
+`unsolvable`. The first throwaway prototype written on 2026-09-11 had exactly
+that shape — it marked a position seen the moment it was first reached and
+never revisited it — so a position first met at depth 249 and cut there was
+skipped forever when it was later reached at depth 10. Unsound, and slower.
+
+**Why a refutation needs no depth attached:** a frame keeps its `complete`
+flag only when every child was refuted and nothing below it was cut short, and
+any depth cut underneath clears the flag all the way to the root. A subtree
+still `complete` at the end therefore never wanted depth it did not have, so
+its refutation holds however much depth a later visit brings.
+
+Eviction from the fixed-size table costs re-searching and nothing else: a lost
+entry is recomputed, never mis-answered.
+
+---
+
+## 2026-09-11 — Keys are 128 bits and compared in full
+
+**Status:** firm
+
+Table slots store the whole 128-bit key and compare all of it, so a bucket
+clash is resolved rather than guessed at. A slot is 24 bytes.
+
+**Rejected:** storing a 64-bit hash, which is the usual choice. At ten million
+positions in a deal the birthday bound gives roughly a `3e-6` chance of a false
+match per deal, and across a batch of thousands that is a near-certainty of
+several. A false match merges two different futures, can drop the branch
+holding the only win, and reports a winnable deal as `unsolvable` — with
+nothing in the output to show it happened. Doubling the key makes that
+`1e-25`. The cost is memory, which is measured and budgeted, rather than
+correctness, which is not recoverable.
+
+The key table is generated from a frozen seed. It does not decide which deals
+exist, but it does decide which collisions are possible, and a published
+verdict should be reproducible to that level.
+
+---
+
+## 2026-09-11 — Repetitions on the current path are cut conservatively
+
+**Status:** provisional
+
+Reaching a position already on the search stack cuts that branch — the earlier
+visit has strictly more depth in hand and is enumerating the same moves — but
+the frame is *also* marked incomplete, so no refutation is recorded through a
+repetition.
+
+The conservative half is deliberate. Whether the repeat is genuinely refuted
+depends on how its ancestor resolves, which is not known while the ancestor is
+still on the stack; recording a refutation that rests on an unresolved ancestor
+would let a later search skip a live branch. This is the graph-history problem
+and the safe direction is to give up the claim.
+
+**Consequence:** `unsolvable` is much harder to prove than it looks, because
+this game is full of short cycles — with worry-back, playing a card up and
+worrying it straight back is one. Expect the `unknown` bucket to be dominated
+by this rather than by the node budget.
+
+**Provisional** because there is a known better answer: mark incomplete only up
+to the ancestor that was repeated rather than all the way to the root. It is
+fiddly and it is not worth writing before Klondike says the search is correct
+at all. Revisit with a measured refutation rate, not with reasoning.
+
+---
+
+## 2026-09-11 — A claimed win is replayed before it is returned
+
+**Status:** firm
+
+`solve` replays its own move list from the opening position and checks it ends
+won. If it does not, the call returns an error naming the line rather than a
+verdict.
+
+A solver that misses wins produces a number that is too low and an `unknown`
+bucket that is too big — visible, and honest. A solver that invents wins
+produces a number that is too high and looks exactly like success. The check
+costs one replay per solved deal, against a search that took millions of nodes.
+
+**Consequence:** the batch runner treats this error as a stop condition, not as
+a deal-level result. It means the solver is wrong, not that the deal is
+strange.
+
+---
+
+## 2026-09-11 — The baseline solver applies no dominances
+
+**Status:** provisional
+
+The first solver cuts only on transpositions and on its own limits. No safe
+autoplay, no null-move filtering, no empty-column deduplication — even though
+`legal_moves` offers moves that are visibly pointless, such as shifting a whole
+face-up column onto an empty one. Move *ordering* is applied, since reordering
+discards nothing.
+
+This is the control. Every later cut has to show what it buys against these
+numbers, and a cut that changes a verdict rather than a node count is a bug.
+
+Measured on this machine, one core, `--max-depth 400`, 64 MiB table, 2026-09-11:
+
+| Deal | Ruleset | Nodes | Time | Verdict |
+|---|---|---|---|---|
+| 0 | no worry-back | 1M | 5.3s | unknown (budget) |
+| 1 | no worry-back | 1M | 7.2s | unknown (budget) |
+| 2 | no worry-back | 1M | 4.0s | unknown (budget) |
+| 3 | no worry-back | 1M | 2.4s | unknown (budget) |
+| 0 | full | 1M | 5.8s | unknown (budget) |
+| 1 | full | 1M | 7.7s | unknown (budget) |
+
+Roughly 140-410k states per second. Slower than the throwaway prototype that
+preceded it, which managed 250-330k with a 64-bit key, no cycle check and an
+unsound table — the difference is what correctness costs here, and it is not
+the thing to optimise before the search is known to be right.
+
+**No real Gypsy deal has been solved yet.** That is expected at this budget and
+it is exactly why Klondike validation comes next: it is the only thing that
+separates "this search is too weak" from "this search is wrong".
+
+---
+
+## 2026-09-11 — Measured: the depth limit makes the table re-expand states
+
+**Status:** firm (a measurement, not a choice)
+
+The baseline solver re-expands the same positions roughly twenty times each.
+Seed 2, no worry-back, 1M nodes, 64 MiB table (2,097,152 slots):
+
+| Depth limit | States expanded | Distinct states recorded | Re-expansion |
+|---|---|---|---|
+| 120 | 1,000,000 | 45,401 | 22x |
+| 150 | 1,000,000 | 32,302 | 31x |
+| 200 | 1,000,000 | 22,973 | 44x |
+| 300 | 1,000,000 | 18,177 | 55x |
+| 400 | 1,000,000 | 17,424 | 57x |
+
+And at 100M nodes on the same deal, depth 400, a 1 GiB table: 631,875 distinct
+states. Half a billion states expanded per million recorded.
+
+The table is not the constraint — 45k entries in 2M slots means eviction is not
+happening. The cause is the interaction between the depth limit and the
+abandonment rule: an entry recorded at depth *d* only answers a visit with no
+more depth than *d*, and a depth-first search arrives at the same position with
+a different amount of depth in hand almost every time, so most probes miss and
+the position is searched again from scratch. A wider depth limit makes it
+worse, because it spreads arrivals over more distinct depths.
+
+This is the gap between the baseline and a usable solver, and it is larger than
+anything a dominance will recover. Twenty to fifty times the work is being
+spent re-deriving results already computed.
+
+**Not fixed here, and deliberately.** The candidate answers — iterative
+deepening so that each pass has one depth to record against, a progress measure
+that makes the graph acyclic enough to drop the depth limit, or the
+repeated-ancestor fix noted above — change the shape of the search, and
+choosing between them on reasoning rather than evidence is how the wrong one
+gets built. Klondike validation comes first: it says whether the search is
+correct, and it supplies deals with known answers to measure a replacement
+against. A search this inefficient will still reproduce ~81.9% if it is right,
+only slowly.
+
+**Consequence for the ordering already decided:** unchanged, and reinforced.
+Dominance work on top of a search doing fifty times redundant work would be
+measuring the wrong thing.

@@ -104,11 +104,19 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "gypsy-core",
+ "gypsy-solver",
 ]
 
 [[package]]
 name = "gypsy-core"
 version = "0.1.0"
+
+[[package]]
+name = "gypsy-solver"
+version = "0.1.0"
+dependencies = [
+ "gypsy-core",
+]
 
 [[package]]
 name = "heck"
