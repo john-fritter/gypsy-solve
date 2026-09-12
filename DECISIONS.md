@@ -389,3 +389,49 @@ the thing to optimise before the search is known to be right.
 **No real Gypsy deal has been solved yet.** That is expected at this budget and
 it is exactly why Klondike validation comes next: it is the only thing that
 separates "this search is too weak" from "this search is wrong".
+
+---
+
+## 2026-09-11 — Measured: the depth limit makes the table re-expand states
+
+**Status:** firm (a measurement, not a choice)
+
+The baseline solver re-expands the same positions roughly twenty times each.
+Seed 2, no worry-back, 1M nodes, 64 MiB table (2,097,152 slots):
+
+| Depth limit | States expanded | Distinct states recorded | Re-expansion |
+|---|---|---|---|
+| 120 | 1,000,000 | 45,401 | 22x |
+| 150 | 1,000,000 | 32,302 | 31x |
+| 200 | 1,000,000 | 22,973 | 44x |
+| 300 | 1,000,000 | 18,177 | 55x |
+| 400 | 1,000,000 | 17,424 | 57x |
+
+And at 100M nodes on the same deal, depth 400, a 1 GiB table: 631,875 distinct
+states. Half a billion states expanded per million recorded.
+
+The table is not the constraint — 45k entries in 2M slots means eviction is not
+happening. The cause is the interaction between the depth limit and the
+abandonment rule: an entry recorded at depth *d* only answers a visit with no
+more depth than *d*, and a depth-first search arrives at the same position with
+a different amount of depth in hand almost every time, so most probes miss and
+the position is searched again from scratch. A wider depth limit makes it
+worse, because it spreads arrivals over more distinct depths.
+
+This is the gap between the baseline and a usable solver, and it is larger than
+anything a dominance will recover. Twenty to fifty times the work is being
+spent re-deriving results already computed.
+
+**Not fixed here, and deliberately.** The candidate answers — iterative
+deepening so that each pass has one depth to record against, a progress measure
+that makes the graph acyclic enough to drop the depth limit, or the
+repeated-ancestor fix noted above — change the shape of the search, and
+choosing between them on reasoning rather than evidence is how the wrong one
+gets built. Klondike validation comes first: it says whether the search is
+correct, and it supplies deals with known answers to measure a replacement
+against. A search this inefficient will still reproduce ~81.9% if it is right,
+only slowly.
+
+**Consequence for the ordering already decided:** unchanged, and reinforced.
+Dominance work on top of a search doing fifty times redundant work would be
+measuring the wrong thing.
