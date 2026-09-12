@@ -258,3 +258,134 @@ enough evidence to design an abstraction around.
 **Rejected:** writing the solver against Klondike first, where the right answer
 is known throughout. It is the most rigorous order and the slowest to a Gypsy
 number, and the baseline is needed anyway as the control for dominance work.
+
+---
+
+## 2026-09-11 — The table separates refutation from abandonment
+
+**Status:** firm
+
+A transposition entry records either that a position was searched to
+exhaustion and lost (**refuted**), or that the search gave up on it with a
+recorded amount of depth in hand (**abandoned**). A probe reuses a refutation
+at any depth; it reuses an abandonment only for a visit with no more depth to
+spend than the visit that recorded it, and a caller that skips on one must
+report `unknown`.
+
+Collapsing the two is the bug that turns an exhausted budget into a confident
+`unsolvable`. The first throwaway prototype written on 2026-09-11 had exactly
+that shape — it marked a position seen the moment it was first reached and
+never revisited it — so a position first met at depth 249 and cut there was
+skipped forever when it was later reached at depth 10. Unsound, and slower.
+
+**Why a refutation needs no depth attached:** a frame keeps its `complete`
+flag only when every child was refuted and nothing below it was cut short, and
+any depth cut underneath clears the flag all the way to the root. A subtree
+still `complete` at the end therefore never wanted depth it did not have, so
+its refutation holds however much depth a later visit brings.
+
+Eviction from the fixed-size table costs re-searching and nothing else: a lost
+entry is recomputed, never mis-answered.
+
+---
+
+## 2026-09-11 — Keys are 128 bits and compared in full
+
+**Status:** firm
+
+Table slots store the whole 128-bit key and compare all of it, so a bucket
+clash is resolved rather than guessed at. A slot is 24 bytes.
+
+**Rejected:** storing a 64-bit hash, which is the usual choice. At ten million
+positions in a deal the birthday bound gives roughly a `3e-6` chance of a false
+match per deal, and across a batch of thousands that is a near-certainty of
+several. A false match merges two different futures, can drop the branch
+holding the only win, and reports a winnable deal as `unsolvable` — with
+nothing in the output to show it happened. Doubling the key makes that
+`1e-25`. The cost is memory, which is measured and budgeted, rather than
+correctness, which is not recoverable.
+
+The key table is generated from a frozen seed. It does not decide which deals
+exist, but it does decide which collisions are possible, and a published
+verdict should be reproducible to that level.
+
+---
+
+## 2026-09-11 — Repetitions on the current path are cut conservatively
+
+**Status:** provisional
+
+Reaching a position already on the search stack cuts that branch — the earlier
+visit has strictly more depth in hand and is enumerating the same moves — but
+the frame is *also* marked incomplete, so no refutation is recorded through a
+repetition.
+
+The conservative half is deliberate. Whether the repeat is genuinely refuted
+depends on how its ancestor resolves, which is not known while the ancestor is
+still on the stack; recording a refutation that rests on an unresolved ancestor
+would let a later search skip a live branch. This is the graph-history problem
+and the safe direction is to give up the claim.
+
+**Consequence:** `unsolvable` is much harder to prove than it looks, because
+this game is full of short cycles — with worry-back, playing a card up and
+worrying it straight back is one. Expect the `unknown` bucket to be dominated
+by this rather than by the node budget.
+
+**Provisional** because there is a known better answer: mark incomplete only up
+to the ancestor that was repeated rather than all the way to the root. It is
+fiddly and it is not worth writing before Klondike says the search is correct
+at all. Revisit with a measured refutation rate, not with reasoning.
+
+---
+
+## 2026-09-11 — A claimed win is replayed before it is returned
+
+**Status:** firm
+
+`solve` replays its own move list from the opening position and checks it ends
+won. If it does not, the call returns an error naming the line rather than a
+verdict.
+
+A solver that misses wins produces a number that is too low and an `unknown`
+bucket that is too big — visible, and honest. A solver that invents wins
+produces a number that is too high and looks exactly like success. The check
+costs one replay per solved deal, against a search that took millions of nodes.
+
+**Consequence:** the batch runner treats this error as a stop condition, not as
+a deal-level result. It means the solver is wrong, not that the deal is
+strange.
+
+---
+
+## 2026-09-11 — The baseline solver applies no dominances
+
+**Status:** provisional
+
+The first solver cuts only on transpositions and on its own limits. No safe
+autoplay, no null-move filtering, no empty-column deduplication — even though
+`legal_moves` offers moves that are visibly pointless, such as shifting a whole
+face-up column onto an empty one. Move *ordering* is applied, since reordering
+discards nothing.
+
+This is the control. Every later cut has to show what it buys against these
+numbers, and a cut that changes a verdict rather than a node count is a bug.
+
+Measured on this machine, one core, `--max-depth 400`, 64 MiB table, 2026-09-11:
+
+| Deal | Ruleset | Nodes | Time | Verdict |
+|---|---|---|---|---|
+| 0 | no worry-back | 1M | 5.3s | unknown (budget) |
+| 1 | no worry-back | 1M | 7.2s | unknown (budget) |
+| 2 | no worry-back | 1M | 4.0s | unknown (budget) |
+| 3 | no worry-back | 1M | 2.4s | unknown (budget) |
+| 0 | full | 1M | 5.8s | unknown (budget) |
+| 1 | full | 1M | 7.7s | unknown (budget) |
+
+Roughly 140-410k states per second. Slower than the throwaway prototype that
+preceded it, which managed 250-330k with a 64-bit key, no cycle check and an
+unsound table — the difference is what correctness costs here, and it is not
+the thing to optimise before the search is known to be right.
+
+**No real Gypsy deal has been solved yet.** That is expected at this budget and
+it is exactly why Klondike validation comes next: it is the only thing that
+separates "this search is too weak" from "this search is wrong".

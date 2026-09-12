@@ -1,5 +1,5 @@
 [workspace]
-members = ["core", "cli"]
+members = ["core", "solver", "cli"]
 resolver = "2"
 
 [workspace.package]
@@ -10,3 +10,4 @@ repository = "https://github.com/john-fritter/gypsy-solve"
 
 [workspace.dependencies]
 gypsy-core = { path = "core" }
+gypsy-solver = { path = "solver" }

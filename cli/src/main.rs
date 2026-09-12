@@ -7,6 +7,7 @@ use std::process::ExitCode;
 
 use clap::{Args, Parser, Subcommand};
 use gypsy_core::{parse_move_list, Move, MoveOptions, State};
+use gypsy_solver::{solve, Config, Limit, Report, Verdict};
 
 #[derive(Parser)]
 #[command(name = "gypsy", version, about = "Two-deck Gypsy solitaire engine")]
@@ -23,6 +24,8 @@ enum Command {
     Moves(MovesArgs),
     /// Apply a move list to a seeded deal.
     Replay(ReplayArgs),
+    /// Search a seeded deal for a winning line.
+    Solve(SolveArgs),
 }
 
 #[derive(Args)]
@@ -60,6 +63,31 @@ struct ReplayArgs {
     /// Print the position after every move, not just at the end.
     #[arg(long)]
     step: bool,
+}
+
+#[derive(Args)]
+struct SolveArgs {
+    #[arg(long)]
+    seed: u64,
+    /// States to expand before giving up. The limit is a node count, not a
+    /// clock, so the verdict is the same on any machine.
+    #[arg(long, default_value_t = 10_000_000)]
+    budget: u64,
+    /// Longest line the search may build. A win needs at least 114 moves.
+    #[arg(long, default_value_t = 600)]
+    max_depth: u32,
+    /// Transposition table size in MiB.
+    #[arg(long, default_value_t = 256)]
+    table_mib: usize,
+    /// Solve the restricted game, with no foundation-to-tableau moves.
+    #[arg(long)]
+    no_worry_back: bool,
+    /// Write the winning line here, for `gypsy replay --moves-file`.
+    #[arg(long, value_name = "PATH")]
+    trace: Option<String>,
+    /// One JSON object instead of a human-readable report.
+    #[arg(long)]
+    json: bool,
 }
 
 fn main() -> ExitCode {
@@ -118,9 +146,128 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
                 if state.is_won() { "won" } else { "not won" }
             )?;
         }
+        Command::Solve(args) => {
+            let config = Config {
+                options: if args.no_worry_back {
+                    MoveOptions::NO_WORRY_BACK
+                } else {
+                    MoveOptions::ALL
+                },
+                node_budget: args.budget,
+                max_depth: args.max_depth,
+                table_entries: gypsy_solver::Table::entries_in(args.table_mib << 20),
+            };
+
+            let state = State::deal(args.seed);
+            let report = solve(&state, config)?;
+
+            if let (Some(path), Some(line)) = (&args.trace, &report.line) {
+                let text: Vec<String> = line.iter().map(|mv| mv.to_string()).collect();
+                fs::write(path, format!("{}\n", text.join("\n")))?;
+            }
+
+            if args.json {
+                writeln!(out, "{}", json_report(args.seed, &args, &report))?;
+            } else {
+                write_report(&mut out, args.seed, &args, &report)?;
+            }
+        }
     }
 
     Ok(())
+}
+
+fn verdict_name(verdict: Verdict) -> &'static str {
+    match verdict {
+        Verdict::Solvable => "solvable",
+        Verdict::Unsolvable => "unsolvable",
+        Verdict::Unknown => "unknown",
+    }
+}
+
+fn limit_name(limit: Option<Limit>) -> &'static str {
+    match limit {
+        Some(Limit::Budget) => "budget",
+        Some(Limit::Depth) => "depth",
+        None => "none",
+    }
+}
+
+fn ruleset_name(no_worry_back: bool) -> &'static str {
+    if no_worry_back {
+        "no-worry-back"
+    } else {
+        "full"
+    }
+}
+
+fn write_report(
+    out: &mut impl Write,
+    seed: u64,
+    args: &SolveArgs,
+    report: &Report,
+) -> io::Result<()> {
+    writeln!(
+        out,
+        "seed {seed}  ruleset {}",
+        ruleset_name(args.no_worry_back)
+    )?;
+    writeln!(out, "verdict {}", verdict_name(report.verdict))?;
+    if report.verdict == Verdict::Unknown {
+        // The distinction the whole three-valued result exists to keep.
+        writeln!(
+            out,
+            "  stopped at the {} limit; this is not a proof of anything",
+            limit_name(report.limit)
+        )?;
+    }
+    writeln!(
+        out,
+        "nodes {}  table {}/{}  {:.2}s",
+        report.nodes,
+        report.table_filled,
+        report.table_capacity,
+        report.elapsed.as_secs_f64()
+    )?;
+    if let Some(line) = &report.line {
+        writeln!(out, "line {} moves", line.len())?;
+        let text: Vec<String> = line.iter().map(|mv| mv.to_string()).collect();
+        writeln!(out, "{}", text.join(" "))?;
+    }
+    Ok(())
+}
+
+/// A flat JSON object, one per deal, for the batch runner to collect.
+fn json_report(seed: u64, args: &SolveArgs, report: &Report) -> String {
+    let line = match &report.line {
+        Some(line) => format!(
+            "\"{}\"",
+            line.iter()
+                .map(|mv| mv.to_string())
+                .collect::<Vec<_>>()
+                .join(" ")
+        ),
+        None => "null".to_string(),
+    };
+    format!(
+        concat!(
+            r#"{{"seed":{},"ruleset":"{}","verdict":"{}","limit":"{}","nodes":{},"#,
+            r#""line_length":{},"elapsed_ms":{},"node_budget":{},"max_depth":{},"#,
+            r#""table_capacity":{},"table_filled":{},"line":{}}}"#
+        ),
+        seed,
+        ruleset_name(args.no_worry_back),
+        verdict_name(report.verdict),
+        limit_name(report.limit),
+        report.nodes,
+        report.line.as_ref().map_or(0, |line| line.len()),
+        report.elapsed.as_millis(),
+        args.budget,
+        args.max_depth,
+        report.table_capacity,
+        report.table_filled,
+        line,
+    )
 }
 
 fn plural(count: usize) -> &'static str {
