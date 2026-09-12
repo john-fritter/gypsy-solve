@@ -185,10 +185,16 @@ budget-exhausted.
    uses, so the search under test is the search that publishes. The variant is
    the one the published figure was measured on: 24-card stock drawn three at a
    time, redeals without limit, worry-back permitted.
-5. **Dominances**, one per PR, each with a proof that it cannot discard a
+5. **Fix the search shape**, before any dominance. Measured 2026-09-12: on 50
+   Klondike deals, quadrupling the node budget from 3M to 12M resolved two more
+   deals. The search does not converge with budget, because it spends it
+   re-deriving positions it has already seen — 20 to 57 times each. A cut that
+   removes some of the tree is worth little while the tree that remains is
+   searched fifty times over.
+6. **Dominances**, one per PR, each with a proof that it cannot discard a
    winning line, each measured against step 3's baseline.
-6. Batch runner, then batch runs. Worry-back enabled. Analysis + writeup.
-7. WASM front end, last.
+7. Batch runner, then batch runs. Worry-back enabled. Analysis + writeup.
+8. WASM front end, last.
 
 Measurements taken 2026-09-11 against a throwaway prototype, which is why
 step 5 is on the critical path rather than filed as optimization: a naive DFS

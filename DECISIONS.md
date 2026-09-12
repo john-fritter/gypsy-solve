@@ -585,3 +585,42 @@ and the re-expansion cost recorded on 2026-09-11 says most of that budget goes
 on positions the search has already seen 20 to 57 times. That is the thing to
 fix, and Klondike now gives it a scoreboard: the bracket narrows as the search
 improves, and the published figure staying inside it is the regression test.
+
+---
+
+## 2026-09-12 — Measured: the search does not converge with budget
+
+**Status:** firm (a measurement)
+
+The same 50 Klondike deals, at 3M and at 12M nodes. Raw results in
+`docs/results/`.
+
+| Budget | Solvable | Unsolvable | Unknown |
+|---|---|---|---|
+| 3M | 16 | 7 | 27 |
+| 12M | 17 | 8 | 25 |
+
+Four times the budget resolved **two more deals**, 7% of the unknown bucket, at
+a cost of 1,483 seconds for the 50. No verdict regressed, which is the
+consistency check worth having: nothing that was decided at 3M became unknown
+at 12M, and nothing flipped between solvable and unsolvable.
+
+Extrapolate that and clearing the remaining 25 needs a budget nobody is going
+to spend. The unknown bucket is not shrinking with compute in any way that
+matters, which is a different claim from "the search is slow" and a much worse
+one. It means the honest ±0.5% Gypsy figure this project is for cannot be
+reached by turning the budget up, on hardware we have or on any hardware.
+
+**This reorders the build.** DESIGN.md had dominances next. They are not next.
+A dominance removes part of the tree; the measured problem is that whatever
+tree remains gets searched twenty to fifty times over, so the multiplier
+applies to the smaller tree just the same. The re-expansion cost recorded on
+2026-09-11 is now the critical path, and the candidates named there —
+iterative deepening so each pass records against a single depth, a progress
+measure that retires the depth limit, or something else — get chosen on
+Klondike, where the bracket narrowing is the scoreboard and 81.945% staying
+inside it is the regression test.
+
+**What is not in doubt.** Nothing here suggests the search is wrong. The
+verdicts are monotone in budget, the proven-unsolvable rate stays under its
+ceiling, and every reported win replays. It is the right search, built badly.
