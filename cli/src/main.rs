@@ -76,8 +76,9 @@ struct SolveArgs {
     /// clock, so the verdict is the same on any machine.
     #[arg(long, default_value_t = 10_000_000)]
     budget: u64,
-    /// Longest line the search may build. A win needs at least 114 moves.
-    #[arg(long, default_value_t = 600)]
+    /// Stack guard: longest line the search may build. Not a search
+    /// parameter — no position is re-expanded because of it.
+    #[arg(long, default_value_t = 100_000)]
     max_depth: u32,
     /// Transposition table size in MiB.
     #[arg(long, default_value_t = 256)]
@@ -103,7 +104,8 @@ struct KlondikeArgs {
     deals: u64,
     #[arg(long, default_value_t = 10_000_000)]
     budget: u64,
-    #[arg(long, default_value_t = 400)]
+    /// Stack guard, not a search parameter.
+    #[arg(long, default_value_t = 100_000)]
     max_depth: u32,
     #[arg(long, default_value_t = 256)]
     table_mib: usize,

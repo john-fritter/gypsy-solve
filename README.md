@@ -45,8 +45,11 @@ gypsy klondike --seed 0 --deals 100 --json
 | `unknown` | a limit stopped the search; nothing is proven either way |
 
 `unknown` is never rounded to `unsolvable`. Both limits are deterministic —
-`--budget` counts states expanded and `--max-depth` counts moves, and neither
-is a clock — so a verdict is reproducible on any machine. `--json` prints one
+`--budget` counts states expanded and `--max-depth` bounds the search stack,
+and neither is a clock — so a verdict is reproducible on any machine.
+`--max-depth` is a guard against a pathological descent eating memory rather
+than a search parameter: no position is ever re-expanded because of it, and
+hitting it means something is wrong rather than that it needs raising. `--json` prints one
 flat object per deal; `--trace PATH` writes the winning line in a form
 `gypsy replay --moves-file PATH --step` will walk.
 

@@ -16,46 +16,34 @@
 //! cyclic, so depth is bounded only by the depth limit, and a limit large
 //! enough to hold a real solution is far past what the call stack takes.
 //!
-//! ## Why a refutation does not carry a depth
+//! ## Why previously-expanded positions can simply be skipped
 //!
-//! A frame claims `complete` only when every child was refuted and nothing
-//! below it was cut short. A depth cut anywhere underneath clears the flag and
-//! the clearing propagates to the root. So a subtree that is still `complete`
-//! at the end never reached for depth it did not have, and its refutation
-//! holds however much depth a later visit brings. That is what lets the table
-//! reuse a refutation at any depth while an abandonment has to carry one.
+//! Expanding a position generates every child. So take a shortest winning line
+//! `s0 → … → sk`. If `sj` has been expanded then `s(j+1)` was generated, and
+//! the search either won on it, expanded it, or skipped it because it had
+//! already been expanded. Either way `s(j+1)` gets expanded, so by induction
+//! from the root every position on the line is expanded, and expanding
+//! `s(k-1)` produces the win.
 //!
-//! ## Repetitions on the current path
+//! Depth never appears in that argument, which is why the table does not
+//! record any. An earlier version indexed entries by the depth the search had
+//! in hand, and answered a probe only for a visit with no more depth to spend;
+//! since depth-first search reaches a position with a different amount in hand
+//! nearly every time, most probes missed and positions were re-expanded 20 to
+//! 57 times over.
 //!
-//! Returning to a position already on the stack cannot help: the earlier visit
-//! has strictly more depth in hand and is enumerating the same moves. The
-//! branch is cut, and the frame records *why* it is incomplete, because the
-//! two reasons are not worth the same.
+//! A repetition on the current path needs no special handling either: an
+//! ancestor is by definition already expanded, so the table skips it.
 //!
-//! A repetition does not cost the root its proof. Take any winning line and
-//! take the shortest one: it cannot visit a position twice, or the stretch
-//! between the two visits could be deleted to give a shorter win. So the
-//! shortest win is never the thing a repetition check cuts, and a search that
-//! ran out of nothing but repetitions has still seen every win there is. If it
-//! found none, there is none.
-//!
-//! That argument is about the root, and about repetitions against *this*
-//! path. It does not survive the table. A frame cut only by repetition is
-//! recorded as an abandonment rather than a refutation, and a later search
-//! that skips on that entry treats it as a limit, not a repetition — because
-//! the cut branches looped back to ancestors of the *old* path, which the new
-//! one need not contain, so a win may have been missed down there. Inheriting
-//! it as a limit costs the new search its proof and never gives it a wrong
-//! one.
-//!
-//! So a proof of unsolvability rests only on repetitions the search saw
-//! directly, against the path it was actually on.
+//! The one thing that breaks the induction is a position that is *never*
+//! expanded, which is what the node budget and the stack guard do. Either of
+//! those, anywhere in the run, costs the search its proof — so unsolvability
+//! is claimed only when neither was hit.
 
-use std::collections::HashSet;
 use std::time::{Duration, Instant};
 
 use crate::game::Game;
-use crate::table::{Probe, Table};
+use crate::table::Table;
 
 /// What the search concluded. `Unknown` is a real answer and is never folded
 /// into `Unsolvable`.
@@ -69,25 +57,14 @@ pub enum Verdict {
     Unknown,
 }
 
-/// Why a frame did not finish, worst case last. `None` is a frame that
-/// searched everything below it.
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
-enum Cut {
-    /// Everything below was searched.
-    None,
-    /// Some branch looped back to a position already on the stack. Costs the
-    /// table an entry, but not the root its proof.
-    Repetition,
-    /// Some branch ran out of depth or budget. This one does cost the proof.
-    Limit,
-}
-
 /// Which limit stopped a search.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Limit {
     /// The node budget ran out.
     Budget,
-    /// Some branch reached the depth limit, so the search was not exhaustive.
+    /// A line grew past the stack guard. Not a tuning knob — it is there so a
+    /// pathological descent cannot exhaust memory, and hitting it is a sign
+    /// something is wrong rather than a limit to raise.
     Depth,
 }
 
@@ -99,7 +76,8 @@ pub enum Limit {
 pub struct Config {
     /// States expanded before giving up.
     pub node_budget: u64,
-    /// Longest line the search may build.
+    /// Longest line the search may build, as a memory guard rather than a
+    /// search parameter. Positions are never re-expanded because of it.
     pub max_depth: u32,
     /// Transposition table size, rounded up to a power of two.
     pub table_entries: usize,
@@ -109,7 +87,7 @@ impl Default for Config {
     fn default() -> Config {
         Config {
             node_budget: 10_000_000,
-            max_depth: 600,
+            max_depth: 100_000,
             table_entries: Table::entries_in(256 << 20),
         }
     }
@@ -161,11 +139,6 @@ struct Frame<G: Game> {
     state: G::Position,
     moves: Vec<G::Action>,
     next: usize,
-    key: u128,
-    /// Moves this frame may still add below it.
-    depth: u32,
-    /// The worst reason any child had for not finishing.
-    cut: Cut,
 }
 
 /// Searches a position.
@@ -190,54 +163,27 @@ pub fn solve<G: Game>(
         limit,
     };
 
-    if config.max_depth == 0 {
-        return Ok(finish(
-            Verdict::Unknown,
-            None,
-            0,
-            Some(Limit::Depth),
-            &table,
-        ));
-    }
-
     if game.is_won(start) {
         return Ok(finish(Verdict::Solvable, Some(Vec::new()), 0, None, &table));
     }
 
+    table.insert(game.key(start));
     let mut stack: Vec<Frame<G>> = vec![Frame {
         moves: game.legal_actions(start),
         state: start.clone(),
         next: 0,
-        key: game.key(start),
-        depth: config.max_depth,
-        cut: Cut::None,
     }];
-    let mut path: HashSet<u128> = HashSet::from([game.key(start)]);
     let mut line: Vec<G::Action> = Vec::new();
     let mut nodes: u64 = 1;
     let mut solution: Option<Vec<G::Action>> = None;
     let mut budget_spent = false;
-    let mut root_cut = Cut::Limit;
+    let mut depth_guarded = false;
 
     while let Some(top) = stack.len().checked_sub(1) {
         if stack[top].next == stack[top].moves.len() {
-            let frame = stack.pop().expect("the stack is not empty here");
-            match frame.cut {
-                Cut::None => table.record_refuted(frame.key),
-                // An abandonment, never a refutation. It saves the re-search
-                // without ever claiming the subtree held no win.
-                // An abandonment, never a refutation, carrying why it stopped
-                // so that a later search knows whether its proof survives.
-                Cut::Repetition => table.record_abandoned(frame.key, frame.depth, true),
-                Cut::Limit => table.record_abandoned(frame.key, frame.depth, false),
-            }
-            path.remove(&frame.key);
-            match stack.last_mut() {
-                Some(parent) => {
-                    parent.cut = parent.cut.max(frame.cut);
-                    line.pop();
-                }
-                None => root_cut = frame.cut,
+            stack.pop();
+            if !stack.is_empty() {
+                line.pop();
             }
             continue;
         }
@@ -255,11 +201,11 @@ pub fn solve<G: Game>(
             break;
         }
 
-        // One move was spent reaching the child; what is left is what the
-        // child has to work with.
-        let depth = stack[top].depth - 1;
-        if depth == 0 {
-            stack[top].cut = stack[top].cut.max(Cut::Limit);
+        // Already expanded, so its children have already been generated.
+        // Skipping cannot hide a win; see the module note. An ancestor on the
+        // current path is covered by this too, so loops need nothing special.
+        let key = game.key(&child);
+        if table.contains(key) {
             continue;
         }
 
@@ -267,47 +213,20 @@ pub fn solve<G: Game>(
             budget_spent = true;
             break;
         }
-
-        let key = game.key(&child);
-
-        // A position already on the stack is being worked on above, with more
-        // depth than this repeat would have. See the module note.
-        if path.contains(&key) {
-            stack[top].cut = stack[top].cut.max(Cut::Repetition);
+        // A guard against a pathological descent eating memory, not a search
+        // parameter: no position is ever re-expanded because of it.
+        if stack.len() as u32 >= config.max_depth {
+            depth_guarded = true;
             continue;
-        }
-
-        match table.probe(key, depth) {
-            // Proven lost wherever it is reached from: the parent can still
-            // claim to have refuted this branch.
-            Probe::Refuted => continue,
-            // Looked at before, to at least this depth, without a result. Not
-            // a refutation, so the parent loses its claim to exhaustiveness.
-            // Abandonments are only ever recorded by frames a limit stopped,
-            // so inheriting one inherits a limit.
-            // Skipping is safe either way; what carries over is whether the
-            // earlier search kept its proof.
-            Probe::Exhausted { repetition_only } => {
-                stack[top].cut = stack[top].cut.max(if repetition_only {
-                    Cut::Repetition
-                } else {
-                    Cut::Limit
-                });
-                continue;
-            }
-            Probe::Unknown => {}
         }
 
         nodes += 1;
         line.push(mv);
-        path.insert(key);
+        table.insert(key);
         stack.push(Frame {
             moves: game.legal_actions(&child),
             state: child,
             next: 0,
-            key,
-            depth,
-            cut: Cut::None,
         });
     }
 
@@ -319,15 +238,14 @@ pub fn solve<G: Game>(
         return Ok(finish(Verdict::Solvable, Some(line), nodes, None, &table));
     }
 
+    // Every reachable position was expanded unless something stopped one from
+    // being, and only those two things can.
     let (verdict, limit) = if budget_spent {
         (Verdict::Unknown, Some(Limit::Budget))
+    } else if depth_guarded {
+        (Verdict::Unknown, Some(Limit::Depth))
     } else {
-        match root_cut {
-            // Nothing below the root went unsearched, or the only thing that
-            // did was a loop back to a position already being searched.
-            Cut::None | Cut::Repetition => (Verdict::Unsolvable, None),
-            Cut::Limit => (Verdict::Unknown, Some(Limit::Depth)),
-        }
+        (Verdict::Unsolvable, None)
     };
 
     Ok(finish(verdict, None, nodes, limit, &table))

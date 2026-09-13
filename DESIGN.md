@@ -185,12 +185,13 @@ budget-exhausted.
    uses, so the search under test is the search that publishes. The variant is
    the one the published figure was measured on: 24-card stock drawn three at a
    time, redeals without limit, worry-back permitted.
-5. **Fix the search shape**, before any dominance. Measured 2026-09-12: on 50
-   Klondike deals, quadrupling the node budget from 3M to 12M resolved two more
-   deals. The search does not converge with budget, because it spends it
-   re-deriving positions it has already seen — 20 to 57 times each. A cut that
-   removes some of the tree is worth little while the tree that remains is
-   searched fifty times over.
+5. **Fix the search shape**, before any dominance. Done 2026-09-13: the depth
+   limit was the cause, not a parameter. The table indexed entries by the depth
+   a search had in hand and answered a probe only for a visit with no more to
+   spend, so positions were re-expanded 20 to 57 times. Depth has no place in
+   the argument — expanding a position generates all its children, so skipping
+   anything already expanded cannot hide a win — and the table is now a plain
+   set of expanded positions.
 6. **Dominances**, one per PR, each with a proof that it cannot discard a
    winning line, each measured against step 3's baseline.
 7. Batch runner, then batch runs. Worry-back enabled. Analysis + writeup.
