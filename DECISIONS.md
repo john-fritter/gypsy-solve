@@ -668,15 +668,25 @@ found.
 
 **Measured**, same 50 Klondike deals, 3M budget, one core:
 
-| Table | Solvable | Unsolvable | Unknown | Resolved |
-|---|---|---|---|---|
-| depth-indexed, 50 deals | 16 | 7 | 27 | 46% |
-| expanded-set, first 47 | 21 | 9 | 17 | 64% |
+| Table | Solvable | Unsolvable | Unknown | Resolved | Wall |
+|---|---|---|---|---|---|
+| depth-indexed | 16 | 7 | 27 | 46% | 373s |
+| expanded-set | 21 | 9 | 20 | 60% | 330s |
 
-On the first 19, where both had run to completion at the time of comparison:
-7/3/11 (48% resolved) against 9/4/8 (62%). No verdict contradicted the old
-search — nothing previously decided changed, which is the check that matters,
-and the three that moved all went from `unknown` to decided.
+Seven deals moved, every one of them from `unknown` to decided, and no verdict
+contradicted the old search — nothing previously decided changed, which is the
+check that matters. It also ran slightly faster while resolving more, so the
+extra coverage is not being bought with time.
+
+Raw results in `docs/results/klondike-3M-50deals-expanded-set.jsonl` against
+the first 50 rows of `klondike-3M-200deals.jsonl`.
+
+**Keep the gain in proportion.** Eighteen points, not the twenty- to fiftyfold
+the re-expansion figure might suggest. Killing re-expansion means a budget unit
+now buys a position the search has not seen, rather than one it has seen fifty
+times, so coverage rose by about that factor — but Klondike's hard deals need
+far more than three million distinct positions, and most of the new coverage
+lands short of them.
 
 **`max_depth` survives only as a stack guard.** It bounds memory against a
 pathological descent; nothing is re-expanded because of it, and hitting it
