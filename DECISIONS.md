@@ -701,3 +701,35 @@ and Solvitaire resolves essentially all 50,000 of its instances. The remaining
 distance is dominances, which are now worth having: a cut that removes part of
 the tree was nearly worthless while whatever remained was searched fifty times
 over.
+
+---
+
+## 2026-09-14 — No Gypsy batch until Klondike's unknown bucket shrinks
+
+**Status:** firm
+
+Gypsy batch runs wait on Klondike validation getting below roughly **5%
+unknown** on a thousand deals. Publishing a Gypsy figure waits on roughly **1%**.
+
+At 40% unknown, where the solver stood on 2026-09-13, the validation bracket
+spans about thirty points. The published 81.945% sits inside it and so does
+almost everything else, so the check passes without discriminating: a search
+that misses wins systematically and one that is merely slow produce the same
+result. Running thousands of Gypsy deals against a solver in that state buys a
+number nobody should believe, after days of compute on a box that has to stay
+up for other things.
+
+The second threshold is arithmetic rather than judgement. The unknown bucket is
+a hard floor on the width of any interval that can honestly be quoted, because
+every unknown deal could go either way. A ±0.5% claim with a 5% unknown bucket
+is not a tighter measurement, it is a false one. `CLAUDE.md` already forbids
+reporting a bounded search as exact; this is the same rule with a number
+attached.
+
+**Rejected:** running the batch anyway and reporting a lower bound. That is
+legitimate and it is what a capped worry-back search will have to do, but a
+lower bound of "at least 40% of Gypsy deals are winnable" is not a result worth
+days of compute, and it would make the project look finished when it is not.
+
+**Not a reason to delay:** the two cheap dominances. They are provable in a
+paragraph each, and Klondike is what checks them.

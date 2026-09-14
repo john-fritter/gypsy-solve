@@ -175,10 +175,11 @@ budget-exhausted.
    through a move list. `gypsy replay --step` covers it; the solver feeds it a
    line via `--trace`. Watching the search make obviously stupid moves is how
    the bad dominance gets found.
-3. **Baseline solver.** No-worry-back DFS, transposition table, three-valued
+3. **Done.** Baseline solver: DFS, transposition table, three-valued
    result, no dominances. Deliberately weak: it is the control that every later
    cut gets measured against, and it is expected to return mostly `unknown`.
-4. **Klondike validation**, before any dominance work rather than after. It is
+4. **Done, and standing.** Klondike validation, before any dominance work
+   rather than after. It is
    the only independent check on whether the search is correct, so a slow
    solver and a broken one stay distinguishable. Must reproduce ~81.9%.
    Implemented in `klondike/`, against the same `Game` trait the Gypsy side
@@ -192,18 +193,47 @@ budget-exhausted.
    the argument — expanding a position generates all its children, so skipping
    anything already expanded cannot hide a win — and the table is now a plain
    set of expanded positions.
-6. **Dominances**, one per PR, each with a proof that it cannot discard a
-   winning line, each measured against step 3's baseline.
+6. **Dominances. This is where work resumes.** One per PR, each with a proof
+   that it cannot discard a winning line. Candidates, cheapest and most clearly
+   provable first:
+
+   1. *Interchangeable empty destinations.* With two or more empty columns,
+      moving a card to one rather than another gives positions identical up to
+      a relabelling. Generate one.
+   2. *Whole-column-onto-empty.* Moving an entire face-up column with nothing
+      buried under it onto an empty column is a relabelling and not a move.
+      `legal_moves` emits it today.
+   3. *Safe autoplay.* The dangerous one, and the reason `CLAUDE.md` says to
+      assume any inherited dominance is wrong. It must be proved separately for
+      the worry-back and no-worry-back cases, or not used.
+
+   Every one of these is measured on the same Klondike deal set, and Klondike
+   is now a regression test with teeth: a dominance may change node counts and
+   how many deals resolve, and must **not** change any verdict that was already
+   decided, and must leave 81.945% inside the validation bracket. A dominance
+   that flips a decided verdict is a wrong dominance, and that is exactly the
+   failure this project is least able to detect any other way.
 7. Batch runner, then batch runs. Worry-back enabled. Analysis + writeup.
 8. WASM front end, last.
 
-Measurements taken 2026-09-11 against a throwaway prototype, which is why
-step 5 is on the critical path rather than filed as optimization: a naive DFS
-with no dominances solved none of twelve deals at 500k nodes, and none of three
-at 10M nodes (~40s and ~2 GiB of table each). Weighted-greedy rollouts reached
-21-51 of 104 foundation cards and never won. Neither result says the deals are
-unwinnable; they say a naive search is not close, and that nothing yet tells us
-whether the search is even correct — hence step 4.
+### Do not run a Gypsy batch yet
+
+The Klondike unknown bucket was 40% at a 3M budget on 2026-09-13. While it is
+that large the validation bracket spans roughly thirty points, which is
+consistent with a correct search and cannot distinguish one from a search that
+misses wins systematically.
+
+Two thresholds, and they are different:
+
+- **Below about 5% unknown on a thousand Klondike deals**, validation is a real
+  check rather than a formality, and Gypsy batch work can start.
+- **Below about 1% unknown**, the +/-0.5% Gypsy figure this project exists to
+  produce is reachable. Above that, the unknown bucket is wider than the
+  confidence interval being claimed and the number cannot be published however
+  many deals are run.
+
+Solvitaire resolved essentially all 50,000 instances per game, so this is not
+an unreasonable bar — it is the bar the published comparison was set at.
 
 ## Front end
 
