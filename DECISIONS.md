@@ -591,7 +591,9 @@ improves, and the published figure staying inside it is the regression test.
 
 ## 2026-09-12 — Measured: the search does not converge with budget
 
-**Status:** firm (a measurement)
+**Status:** superseded by *Re-measured: the search does converge with budget,
+far too slowly* (2026-09-14). The measurement was taken on the depth-indexed
+table and does not describe the search that replaced it.
 
 The same 50 Klondike deals, at 3M and at 12M nodes. Raw results in
 `docs/results/`.
@@ -733,3 +735,69 @@ days of compute, and it would make the project look finished when it is not.
 
 **Not a reason to delay:** the two cheap dominances. They are provable in a
 paragraph each, and Klondike is what checks them.
+
+---
+
+## 2026-09-14 — Re-measured: the search does converge with budget, far too slowly
+
+**Status:** firm (a measurement). Supersedes *Measured: the search does not
+converge with budget* (2026-09-12).
+
+That entry was taken on the depth-indexed table, which was replaced on
+2026-09-13. It reordered the build away from dominances, and it was describing
+a search that no longer exists. Re-swept on the expanded-set table: the same 50
+Klondike deals at 3M, 12M and 48M nodes, with table entries held at about four
+times the node budget at every level so that what varies between levels is the
+budget and not table pressure. Raw results in `docs/results/`, files
+`klondike-sweep-{3M,12M,48M}-50deals.jsonl`.
+
+| Budget | Table | Solvable | Unsolvable | Unknown | Bracket |
+|---|---|---|---|---|---|
+| 3M | 256 MiB | 21 | 9 | 20 (40%) | 60.9 pts |
+| 12M | 1 GiB | 23 | 10 | 17 (34%) | 55.8 pts |
+| 48M | 4 GiB | 27 | 10 | 13 (26%) | 48.4 pts |
+
+**The old conclusion was too strong.** The unknown bucket does shrink with
+budget, by a factor of about 0.81 per fourfold step — 0.850 then 0.765, so if
+anything the return is improving rather than decaying. The 2026-09-12 figure of
+two deals per fourfold step is now three, then four. Killing re-expansion did
+not just buy a one-off 18 points of coverage; it restored a real, if slow,
+exchange rate between compute and resolved deals.
+
+**The old conclusion's consequence survives anyway.** Extrapolating the 0.81
+ratio, reaching the 5% unknown gate needs about 7.7 further fourfold steps —
+roughly 4x10^4 times the budget, around 2x10^12 nodes per deal, some 60 days
+per deal at the 262k nodes/second measured here. The 1% publishing gate needs
+about 10^9 times the budget. Both are out of reach by many orders of magnitude,
+on this box or any other. So dominances remain the critical path, and the build
+order set on 2026-09-12 stands — but it stands for a corrected reason, and
+"the search does not converge" should not be repeated. It converges; the rate
+is simply nowhere near enough.
+
+**No verdict regressed.** Across all three levels and both directions, nothing
+decided at a lower budget changed at a higher one, and nothing flipped between
+solvable and unsolvable. Every unknown at every level was stopped by the node
+budget; the stack guard was never reached. The seven deals that resolved were
+six solvable and one unsolvable.
+
+**Determinism confirmed across machines.** The 3M level reproduces
+`klondike-3M-50deals-expanded-set.jsonl` exactly — all 50 seeds agree on
+verdict *and* on node count, on different hardware from the original run. The
+README's claim that a verdict is reproducible on any machine is now tested
+rather than asserted.
+
+**A warning about the one-sided check.** The 2026-09-12 entry leaned on the
+proven-unsolvable rate staying under Klondike's true 18.06%, since an
+exhaustive refutation cannot be inflated by a weak search. It was 12.0% then.
+It is now 20.0%, above the ceiling. This is not evidence of over-refutation —
+at n=50, 10/50 has a Wilson 95% interval of [11.2%, 33.0%] and the ceiling sits
+comfortably inside — but the margin the check used to have is gone, and at
+n=50 it can no longer discriminate at all. It only becomes a real test at
+n=1000, where a sustained 20% would put the ceiling at the very edge of the
+interval. Another reason the validation set has to grow, and growing it needs
+the parallel runner.
+
+**Rejected:** raising the budget as the route to the gate, which is what this
+sweep was run to test. Also rejected: reading the improved exchange rate as a
+reason to defer dominances again. Four orders of magnitude is not a tuning
+problem.
