@@ -313,7 +313,8 @@ verdict should be reproducible to that level.
 
 ## 2026-09-11 — Repetitions on the current path are cut conservatively
 
-**Status:** provisional
+**Status:** superseded by *Repetitions cost the table an entry, not the root its
+proof* (2026-09-12)
 
 Reaching a position already on the search stack cuts that branch — the earlier
 visit has strictly more depth in hand and is enumerating the same moves — but
@@ -435,3 +436,191 @@ only slowly.
 **Consequence for the ordering already decided:** unchanged, and reinforced.
 Dominance work on top of a search doing fifty times redundant work would be
 measuring the wrong thing.
+
+---
+
+## 2026-09-12 — Klondike is a separate crate behind a `Game` trait
+
+**Status:** firm
+
+The solver is generic over a `Game` trait — legal actions, apply, is-won, and a
+transposition key — and Klondike lives in its own `klondike/` crate
+implementing it. `gypsy-core` is untouched.
+
+The trait is not there for elegance. Klondike's job is to say whether the
+search is correct, and a validation that exercised a *different* search would
+say nothing about the one that publishes the Gypsy numbers. Generic means the
+thing under test is literally the thing that ships.
+
+**Not in `gypsy-core`,** because that crate is the single implementation of the
+Gypsy rules and is what compiles to WASM for the site. A game nobody plays
+there does not belong in that payload.
+
+**Rejected:** waiting for a second implementation before extracting the trait,
+which is the usual discipline and was the plan recorded on 2026-09-11. Klondike
+*is* the second implementation, and writing it against a concrete Gypsy search
+would have meant writing the abstraction anyway, one commit later and with a
+throwaway in between.
+
+The key is where the games genuinely differ, and the contrast is worth stating:
+Gypsy may not sort its columns until the stock is spent, because the stock
+deals card *i* to column *i*; Klondike sorts its piles throughout, because a
+draw goes to the waste and no rule ever names a pile from outside. Klondike's
+talon is encoded card by card in its current order plus how far through the
+pass has got — its *length* says nothing, since cards leave from the middle and
+redeals return to the start of what is left.
+
+---
+
+## 2026-09-12 — Repetitions cost the table an entry, not the root its proof
+
+**Status:** firm. Supersedes *Repetitions on the current path are cut
+conservatively* (2026-09-11).
+
+A frame now records *why* it did not finish: nothing, a repetition, or a limit.
+A root that ran out of nothing worse than repetitions returns `unsolvable`,
+where before it returned `unknown`.
+
+**The argument.** Take any winning line from the root and take a shortest one.
+It cannot visit a position twice — the stretch between two visits could be
+deleted for a shorter win. So a shortest win is never what a repetition check
+cuts, and a search stopped by nothing but repetitions has still seen every win
+there is. Finding none is a proof there is none.
+
+**It survives the transposition table**, which is the part that looked wrong
+at first. A table entry was recorded against a *different* path, and it cut
+branches looping back to ancestors the current path need not contain, so it
+seems it could hide a win. It cannot. Take the shortest win `s0 → … → sk`. If
+`sj` was ever expanded then `s(j+1)` was generated, and the search either won
+on it, expanded it, skipped it as on-path, or skipped it on a table entry —
+and *both* kinds of skip mean it had already been expanded. By induction from
+the root every `sj` is expanded, and expanding `s(k-1)` produces the win. The
+only step that breaks the chain is a limit cut, where a position is never
+expanded at all.
+
+So an abandonment records why it gave up, and a search that skips on one
+inherits that reason. A proof survives repetitions from either source and never
+survives a limit.
+
+The first attempt left repetition-cut frames out of the table instead, which is
+also sound but cost the table too much: on the same 25 Klondike deals it took
+solved deals from 9 down to 6, because the re-searching ate the budget. That is
+what sent me back to check whether the table-inherited case was really unsound.
+
+None of this licences recording a *refutation* through a repetition, whose
+truth can still depend on an ancestor sitting unresolved on the stack — the
+graph-history problem the superseded entry was right to be careful about. Those
+stay abandonments.
+
+**Why it was worth revisiting now.** The superseded rule made `unsolvable`
+nearly unreachable, and Klondike's known answer is roughly 18% unsolvable — so
+validation could not have used half of its own signal. Klondike deal 2 was
+exhausting its entire search tree in 16,699 nodes, unchanged whether the depth
+limit was 400 or 10,000, and still coming back `unknown`. It now comes back
+`unsolvable` in the same 16,699 nodes.
+
+---
+
+## 2026-09-12 — The Klondike variant is the one the published figure measures
+
+**Status:** firm
+
+24-card stock drawn three at a time, redeals without limit, worry-back from the
+foundations permitted. This is the variant behind Solvitaire's 81.945% ±
+0.084% thoughtful figure (Blake & Gent). Draw-one is roughly nine points higher
+and would validate nothing.
+
+Worry-back being part of it is a bonus rather than a nuisance: it is the risky
+path on the Gypsy side too, so validation exercises it rather than stepping
+around it.
+
+**Two rules were not confirmed from the paper** and follow the near-universal
+convention: only a king may be placed on an empty pile, and any correctly
+sequenced suffix of a pile's face-up cards may be moved rather than only the
+whole run. If the measured rate misses the target these are the first suspects,
+and each is a one-line change to test.
+
+The deal takes cards pile by pile rather than interleaving rows as a physical
+deal does. Both map a uniformly shuffled deck to a uniformly distributed
+position, and this one is easier to check.
+
+---
+
+## 2026-09-12 — Klondike validation: consistent, and too weak to be worth much
+
+**Status:** firm (a measurement)
+
+200 Klondike deals, 3M node budget, depth 400, one core. Raw results kept at
+`docs/results/klondike-3M-200deals.jsonl`; summarise with
+`analysis/klondike_validation.py`.
+
+| | Count | Share |
+|---|---|---|
+| solvable (each replayed to a win) | 76 | 38.0% |
+| unsolvable (each an exhaustive refutation) | 24 | 12.0% |
+| unknown | 100 | 50.0% |
+
+Every unknown was stopped by the node budget. Not one hit the depth limit, so
+depth 400 is not binding and the earlier worry about winning lines being longer
+than the limit was unfounded for Klondike.
+
+**What this establishes.** True winnability is at least the solvable rate and
+at most one minus the proven-unsolvable rate, which after widening for sampling
+error is **31.6% to 91.8%**. The published 81.945% sits inside. So does 50%,
+and so does 85%. A 60-point bracket is consistent with correctness and is not
+evidence of it.
+
+**The one part that does discriminate.** A proven-unsolvable verdict is
+exhaustive, so that rate can only ever be a lower bound on the true 18.06%. It
+came in at 12.0%, Wilson 95% [8.2%, 17.2%] — under the ceiling, with the top of
+the interval just below it. A search that refutes deals it should not would
+push through 18.06%, and this does not. It is a one-sided check and it passes.
+
+**What is not established.** Nothing rules out a solver that misses wins for a
+systematic reason rather than a budget reason. Half the sample is unknown, and
+until that shrinks the two look identical from here.
+
+**The blocker is the one already measured.** Every unknown is budget-capped,
+and the re-expansion cost recorded on 2026-09-11 says most of that budget goes
+on positions the search has already seen 20 to 57 times. That is the thing to
+fix, and Klondike now gives it a scoreboard: the bracket narrows as the search
+improves, and the published figure staying inside it is the regression test.
+
+---
+
+## 2026-09-12 — Measured: the search does not converge with budget
+
+**Status:** firm (a measurement)
+
+The same 50 Klondike deals, at 3M and at 12M nodes. Raw results in
+`docs/results/`.
+
+| Budget | Solvable | Unsolvable | Unknown |
+|---|---|---|---|
+| 3M | 16 | 7 | 27 |
+| 12M | 17 | 8 | 25 |
+
+Four times the budget resolved **two more deals**, 7% of the unknown bucket, at
+a cost of 1,483 seconds for the 50. No verdict regressed, which is the
+consistency check worth having: nothing that was decided at 3M became unknown
+at 12M, and nothing flipped between solvable and unsolvable.
+
+Extrapolate that and clearing the remaining 25 needs a budget nobody is going
+to spend. The unknown bucket is not shrinking with compute in any way that
+matters, which is a different claim from "the search is slow" and a much worse
+one. It means the honest ±0.5% Gypsy figure this project is for cannot be
+reached by turning the budget up, on hardware we have or on any hardware.
+
+**This reorders the build.** DESIGN.md had dominances next. They are not next.
+A dominance removes part of the tree; the measured problem is that whatever
+tree remains gets searched twenty to fifty times over, so the multiplier
+applies to the smaller tree just the same. The re-expansion cost recorded on
+2026-09-11 is now the critical path, and the candidates named there —
+iterative deepening so each pass records against a single depth, a progress
+measure that retires the depth limit, or something else — get chosen on
+Klondike, where the bracket narrowing is the scoreboard and 81.945% staying
+inside it is the regression test.
+
+**What is not in doubt.** Nothing here suggests the search is wrong. The
+verdicts are monotone in budget, the proven-unsolvable rate stays under its
+ceiling, and every reported win replays. It is the right search, built badly.

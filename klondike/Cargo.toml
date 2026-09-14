@@ -1,0 +1,11 @@
+[package]
+name = "klondike"
+description = "Klondike solitaire, implemented to validate the solver against a published winnability figure"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+gypsy-core.workspace = true
+gypsy-solver.workspace = true

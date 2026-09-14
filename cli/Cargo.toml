@@ -13,4 +13,5 @@ path = "src/main.rs"
 [dependencies]
 gypsy-core.workspace = true
 gypsy-solver.workspace = true
+klondike.workspace = true
 clap = { version = "4", features = ["derive"] }

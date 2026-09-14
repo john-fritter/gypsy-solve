@@ -19,8 +19,10 @@ pub enum Probe {
     /// Searched exhaustively before, and lost. Sound to reuse at any depth.
     Refuted,
     /// Searched before with at least this much depth and nothing was found.
-    /// Not a refutation — a caller that skips on this must report `unknown`.
-    Exhausted,
+    /// Not a refutation. `repetition_only` says whether that earlier search
+    /// was stopped by nothing worse than a loop back onto its own path, which
+    /// the caller needs in order to know whether its own proof survives.
+    Exhausted { repetition_only: bool },
     /// Nothing useful known; search it.
     Unknown,
 }
@@ -28,7 +30,10 @@ pub enum Probe {
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Kind {
     Empty,
-    Abandoned,
+    /// Gave up, with the reason recorded: a loop, or a real limit.
+    Abandoned {
+        repetition_only: bool,
+    },
     Refuted,
 }
 
@@ -91,7 +96,9 @@ impl Table {
         match slot.kind {
             Kind::Refuted => Probe::Refuted,
             // A shallower previous visit says nothing about a deeper one.
-            Kind::Abandoned if slot.depth >= depth => Probe::Exhausted,
+            Kind::Abandoned { repetition_only } if slot.depth >= depth => {
+                Probe::Exhausted { repetition_only }
+            }
             _ => Probe::Unknown,
         }
     }
@@ -106,11 +113,12 @@ impl Table {
     }
 
     /// Records that `key` was searched with `depth` in hand and abandoned.
-    pub fn record_abandoned(&mut self, key: u128, depth: u32) {
+    /// `repetition_only` means nothing worse than a loop stopped it.
+    pub fn record_abandoned(&mut self, key: u128, depth: u32, repetition_only: bool) {
         self.write(Slot {
             key,
             depth,
-            kind: Kind::Abandoned,
+            kind: Kind::Abandoned { repetition_only },
         });
     }
 
@@ -149,9 +157,12 @@ mod tests {
     #[test]
     fn an_abandoned_entry_only_answers_shallower_visits() {
         let mut table = Table::with_entries(1024);
-        table.record_abandoned(7, 50);
-        assert_eq!(table.probe(7, 50), Probe::Exhausted);
-        assert_eq!(table.probe(7, 20), Probe::Exhausted);
+        table.record_abandoned(7, 50, false);
+        let exhausted = Probe::Exhausted {
+            repetition_only: false,
+        };
+        assert_eq!(table.probe(7, 50), exhausted);
+        assert_eq!(table.probe(7, 20), exhausted);
         // More depth than last time means there is more to look at.
         assert_eq!(table.probe(7, 51), Probe::Unknown);
     }
@@ -159,8 +170,27 @@ mod tests {
     #[test]
     fn an_abandoned_entry_is_never_reported_as_a_refutation() {
         let mut table = Table::with_entries(1024);
-        table.record_abandoned(3, 1000);
+        table.record_abandoned(3, 1000, false);
         assert_ne!(table.probe(3, 10), Probe::Refuted);
+    }
+
+    #[test]
+    fn an_abandoned_entry_remembers_why_it_gave_up() {
+        let mut table = Table::with_entries(1024);
+        table.record_abandoned(11, 10, true);
+        table.record_abandoned(12, 10, false);
+        assert_eq!(
+            table.probe(11, 5),
+            Probe::Exhausted {
+                repetition_only: true
+            }
+        );
+        assert_eq!(
+            table.probe(12, 5),
+            Probe::Exhausted {
+                repetition_only: false
+            }
+        );
     }
 
     #[test]

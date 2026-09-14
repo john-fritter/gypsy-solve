@@ -9,9 +9,10 @@ kept under `docs/reports/`.
 ## Layout
 
 ```
-core/     rules, state, move generation, seeded deals   (Rust)
-solver/   search, transposition table                   (Rust)
-cli/      deal, list moves, replay, solve               (Rust)
+core/       rules, state, move generation, seeded deals   (Rust)
+solver/     game trait, search, transposition table       (Rust)
+klondike/   Klondike, for validating the solver           (Rust)
+cli/        deal, list moves, replay, solve               (Rust)
 ```
 
 ## Build
@@ -28,6 +29,7 @@ gypsy deal   --seed 42
 gypsy moves  --seed 42 --moves "T7>F2"
 gypsy replay --seed 42 --moves-file line.txt --step
 gypsy solve  --seed 42 --budget 10000000 --trace line.txt
+gypsy klondike --seed 0 --deals 100 --json
 ```
 
 `--moves-file -` reads from stdin. In a move file, `#` starts a comment.
@@ -49,7 +51,23 @@ flat object per deal; `--trace PATH` writes the winning line in a form
 `gypsy replay --moves-file PATH --step` will walk.
 
 The solver applies no dominances. It is the baseline that later cuts get
-measured against, and on a real deal it mostly returns `unknown`.
+measured against, and on a real Gypsy deal it mostly returns `unknown`.
+
+## Validation
+
+`gypsy klondike` runs the same search over Klondike, which has a published
+thoughtful winnability of 81.945% ± 0.084% (Solvitaire, Blake & Gent). The
+variant implemented is the one that figure was measured on: 24-card stock drawn
+three at a time, redeals without limit, worry-back permitted.
+
+The point is that it is the *same* search — `gypsy_solver::solve` is generic
+over a `Game` trait, and Gypsy and Klondike are two implementations of it.
+Validating a separate solver would say nothing about the one that publishes.
+
+Because every `solvable` verdict is replayed before it is returned, the measured
+rate cannot exceed the truth by accident; it can only fall short when deals come
+back `unknown`. So the measured rate is a lower bound, and how close it gets to
+81.945% is the measure of the search rather than of Klondike.
 
 ## Move notation
 

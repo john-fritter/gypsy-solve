@@ -29,20 +29,33 @@
 //!
 //! Returning to a position already on the stack cannot help: the earlier visit
 //! has strictly more depth in hand and is enumerating the same moves. The
-//! branch is therefore cut — but the frame is also marked incomplete, and that
-//! is deliberately conservative. Whether the repeat is truly refuted depends
-//! on how its ancestor resolves, which is not known yet, and recording a
-//! refutation that turns out to rest on an unresolved ancestor would let a
-//! later search skip a live branch. Giving up the claim costs `Unsolvable`
-//! verdicts, which is the safe direction to be wrong in.
+//! branch is cut, and the frame records *why* it is incomplete, because the
+//! two reasons are not worth the same.
+//!
+//! A repetition does not cost the root its proof. Take any winning line and
+//! take the shortest one: it cannot visit a position twice, or the stretch
+//! between the two visits could be deleted to give a shorter win. So the
+//! shortest win is never the thing a repetition check cuts, and a search that
+//! ran out of nothing but repetitions has still seen every win there is. If it
+//! found none, there is none.
+//!
+//! That argument is about the root, and about repetitions against *this*
+//! path. It does not survive the table. A frame cut only by repetition is
+//! recorded as an abandonment rather than a refutation, and a later search
+//! that skips on that entry treats it as a limit, not a repetition — because
+//! the cut branches looped back to ancestors of the *old* path, which the new
+//! one need not contain, so a win may have been missed down there. Inheriting
+//! it as a limit costs the new search its proof and never gives it a wrong
+//! one.
+//!
+//! So a proof of unsolvability rests only on repetitions the search saw
+//! directly, against the path it was actually on.
 
 use std::collections::HashSet;
 use std::time::{Duration, Instant};
 
-use gypsy_core::{Move, MoveOptions, State};
-
+use crate::game::Game;
 use crate::table::{Probe, Table};
-use crate::zobrist::Zobrist;
 
 /// What the search concluded. `Unknown` is a real answer and is never folded
 /// into `Unsolvable`.
@@ -56,6 +69,19 @@ pub enum Verdict {
     Unknown,
 }
 
+/// Why a frame did not finish, worst case last. `None` is a frame that
+/// searched everything below it.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
+enum Cut {
+    /// Everything below was searched.
+    None,
+    /// Some branch looped back to a position already on the stack. Costs the
+    /// table an entry, but not the root its proof.
+    Repetition,
+    /// Some branch ran out of depth or budget. This one does cost the proof.
+    Limit,
+}
+
 /// Which limit stopped a search.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Limit {
@@ -66,10 +92,11 @@ pub enum Limit {
 }
 
 /// Search limits. All of them are deterministic by construction.
+///
+/// Which moves exist is the game's business, not a search limit, so the
+/// ruleset lives on the [`Game`] rather than here.
 #[derive(Clone, Copy, Debug)]
 pub struct Config {
-    /// Which moves the search may use.
-    pub options: MoveOptions,
     /// States expanded before giving up.
     pub node_budget: u64,
     /// Longest line the search may build.
@@ -78,17 +105,9 @@ pub struct Config {
     pub table_entries: usize,
 }
 
-impl Config {
-    /// A winning line plays 104 cards up and deals the stock ten times, so it
-    /// cannot be shorter than this. The default depth limit leaves room for
-    /// the tableau work on top.
-    pub const MINIMUM_WIN_LENGTH: u32 = 114;
-}
-
 impl Default for Config {
     fn default() -> Config {
         Config {
-            options: MoveOptions::ALL,
             node_budget: 10_000_000,
             max_depth: 600,
             table_entries: Table::entries_in(256 << 20),
@@ -98,10 +117,10 @@ impl Default for Config {
 
 /// The outcome of a search, including what it cost.
 #[derive(Clone, Debug)]
-pub struct Report {
+pub struct Report<A> {
     pub verdict: Verdict,
     /// The winning line, when there is one. Replayed before it is returned.
-    pub line: Option<Vec<Move>>,
+    pub line: Option<Vec<A>>,
     /// States expanded.
     pub nodes: u64,
     /// Reported only. Never used as a cutoff.
@@ -115,12 +134,12 @@ pub struct Report {
 /// A solver bug, not a game outcome: the search claimed a win whose move list
 /// does not replay to a win.
 #[derive(Clone, Debug)]
-pub struct UnverifiedSolution {
-    pub line: Vec<Move>,
+pub struct UnverifiedSolution<A> {
+    pub line: Vec<A>,
     pub failure: String,
 }
 
-impl std::fmt::Display for UnverifiedSolution {
+impl<A: std::fmt::Display> std::fmt::Display for UnverifiedSolution<A> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
@@ -135,54 +154,30 @@ impl std::fmt::Display for UnverifiedSolution {
     }
 }
 
-impl std::error::Error for UnverifiedSolution {}
-
-/// Orders the legal moves. This only reorders — nothing is discarded, so it
-/// cannot cost a solution. Dominances, which do discard, are a separate
-/// question and are not applied here.
-fn ordered(state: &State, options: MoveOptions) -> Vec<Move> {
-    let mut moves = state.legal_moves(options);
-    moves.sort_by_key(|mv| match *mv {
-        Move::ToFoundation { .. } => 0u8,
-        Move::Tableau { from, to, count } => {
-            let source = &state.columns[from as usize];
-            let takes_all = count as usize == source.len();
-            let onto_empty = state.columns[to as usize].is_empty();
-            if source.hidden() > 0 && count as usize == source.len() - source.hidden() {
-                1 // turns up a buried card
-            } else if takes_all && !onto_empty {
-                2 // empties a column
-            } else if takes_all && onto_empty {
-                6 // a relabelling of the position, and nothing more
-            } else {
-                3
-            }
-        }
-        Move::Stock => 4,
-        Move::WorryBack { .. } => 5,
-    });
-    moves
-}
+impl<A: std::fmt::Debug + std::fmt::Display> std::error::Error for UnverifiedSolution<A> {}
 
 /// One position on the search stack.
-struct Frame {
-    state: State,
-    moves: Vec<Move>,
+struct Frame<G: Game> {
+    state: G::Position,
+    moves: Vec<G::Action>,
     next: usize,
     key: u128,
     /// Moves this frame may still add below it.
     depth: u32,
-    /// True while every child so far has been refuted.
-    complete: bool,
+    /// The worst reason any child had for not finishing.
+    cut: Cut,
 }
 
 /// Searches a position.
 ///
 /// Returns `Err` only when the search produced a line that does not replay to
 /// a win, which is a bug in this crate rather than a property of the deal.
-pub fn solve(start: &State, config: Config) -> Result<Report, UnverifiedSolution> {
+pub fn solve<G: Game>(
+    game: &G,
+    start: &G::Position,
+    config: Config,
+) -> Result<Report<G::Action>, UnverifiedSolution<G::Action>> {
     let began = Instant::now();
-    let zobrist = Zobrist::new();
     let mut table = Table::with_entries(config.table_entries);
 
     let finish = |verdict, line, nodes, limit, table: &Table| Report {
@@ -205,42 +200,44 @@ pub fn solve(start: &State, config: Config) -> Result<Report, UnverifiedSolution
         ));
     }
 
-    if start.is_won() {
+    if game.is_won(start) {
         return Ok(finish(Verdict::Solvable, Some(Vec::new()), 0, None, &table));
     }
 
-    let mut stack = vec![Frame {
-        moves: ordered(start, config.options),
+    let mut stack: Vec<Frame<G>> = vec![Frame {
+        moves: game.legal_actions(start),
         state: start.clone(),
         next: 0,
-        key: zobrist.key(start),
+        key: game.key(start),
         depth: config.max_depth,
-        complete: true,
+        cut: Cut::None,
     }];
-    let mut path: HashSet<u128> = HashSet::from([zobrist.key(start)]);
-    let mut line: Vec<Move> = Vec::new();
+    let mut path: HashSet<u128> = HashSet::from([game.key(start)]);
+    let mut line: Vec<G::Action> = Vec::new();
     let mut nodes: u64 = 1;
-    let mut solution: Option<Vec<Move>> = None;
+    let mut solution: Option<Vec<G::Action>> = None;
     let mut budget_spent = false;
-    let mut depth_limited = false;
-    let mut root_exhaustive = false;
+    let mut root_cut = Cut::Limit;
 
     while let Some(top) = stack.len().checked_sub(1) {
         if stack[top].next == stack[top].moves.len() {
             let frame = stack.pop().expect("the stack is not empty here");
-            if frame.complete {
-                table.record_refuted(frame.key);
-            } else {
-                table.record_abandoned(frame.key, frame.depth);
+            match frame.cut {
+                Cut::None => table.record_refuted(frame.key),
+                // An abandonment, never a refutation. It saves the re-search
+                // without ever claiming the subtree held no win.
+                // An abandonment, never a refutation, carrying why it stopped
+                // so that a later search knows whether its proof survives.
+                Cut::Repetition => table.record_abandoned(frame.key, frame.depth, true),
+                Cut::Limit => table.record_abandoned(frame.key, frame.depth, false),
             }
             path.remove(&frame.key);
             match stack.last_mut() {
                 Some(parent) => {
-                    parent.complete &= frame.complete;
+                    parent.cut = parent.cut.max(frame.cut);
                     line.pop();
                 }
-                // The root finished on its own terms rather than at a limit.
-                None => root_exhaustive = frame.complete,
+                None => root_cut = frame.cut,
             }
             continue;
         }
@@ -249,11 +246,10 @@ pub fn solve(start: &State, config: Config) -> Result<Report, UnverifiedSolution
         stack[top].next += 1;
 
         let mut child = stack[top].state.clone();
-        child
-            .apply(mv)
-            .expect("legal_moves only offers moves that apply");
+        game.apply(&mut child, mv)
+            .expect("legal_actions only offers actions that apply");
 
-        if child.is_won() {
+        if game.is_won(&child) {
             line.push(mv);
             solution = Some(line.clone());
             break;
@@ -263,8 +259,7 @@ pub fn solve(start: &State, config: Config) -> Result<Report, UnverifiedSolution
         // child has to work with.
         let depth = stack[top].depth - 1;
         if depth == 0 {
-            stack[top].complete = false;
-            depth_limited = true;
+            stack[top].cut = stack[top].cut.max(Cut::Limit);
             continue;
         }
 
@@ -273,12 +268,12 @@ pub fn solve(start: &State, config: Config) -> Result<Report, UnverifiedSolution
             break;
         }
 
-        let key = zobrist.key(&child);
+        let key = game.key(&child);
 
         // A position already on the stack is being worked on above, with more
         // depth than this repeat would have. See the module note.
         if path.contains(&key) {
-            stack[top].complete = false;
+            stack[top].cut = stack[top].cut.max(Cut::Repetition);
             continue;
         }
 
@@ -288,8 +283,16 @@ pub fn solve(start: &State, config: Config) -> Result<Report, UnverifiedSolution
             Probe::Refuted => continue,
             // Looked at before, to at least this depth, without a result. Not
             // a refutation, so the parent loses its claim to exhaustiveness.
-            Probe::Exhausted => {
-                stack[top].complete = false;
+            // Abandonments are only ever recorded by frames a limit stopped,
+            // so inheriting one inherits a limit.
+            // Skipping is safe either way; what carries over is whether the
+            // earlier search kept its proof.
+            Probe::Exhausted { repetition_only } => {
+                stack[top].cut = stack[top].cut.max(if repetition_only {
+                    Cut::Repetition
+                } else {
+                    Cut::Limit
+                });
                 continue;
             }
             Probe::Unknown => {}
@@ -299,18 +302,18 @@ pub fn solve(start: &State, config: Config) -> Result<Report, UnverifiedSolution
         line.push(mv);
         path.insert(key);
         stack.push(Frame {
-            moves: ordered(&child, config.options),
+            moves: game.legal_actions(&child),
             state: child,
             next: 0,
             key,
             depth,
-            complete: true,
+            cut: Cut::None,
         });
     }
 
     if let Some(line) = solution {
         // A win is not believed until it replays from the opening position.
-        if let Err(failure) = replay(start, &line) {
+        if let Err(failure) = replay(game, start, &line) {
             return Err(UnverifiedSolution { line, failure });
         }
         return Ok(finish(Verdict::Solvable, Some(line), nodes, None, &table));
@@ -318,32 +321,28 @@ pub fn solve(start: &State, config: Config) -> Result<Report, UnverifiedSolution
 
     let (verdict, limit) = if budget_spent {
         (Verdict::Unknown, Some(Limit::Budget))
-    } else if root_exhaustive {
-        (Verdict::Unsolvable, None)
     } else {
-        // Either the depth limit or a repetition stopped this being
-        // exhaustive; both are reported as a depth limit.
-        let _ = depth_limited;
-        (Verdict::Unknown, Some(Limit::Depth))
+        match root_cut {
+            // Nothing below the root went unsearched, or the only thing that
+            // did was a loop back to a position already being searched.
+            Cut::None | Cut::Repetition => (Verdict::Unsolvable, None),
+            Cut::Limit => (Verdict::Unknown, Some(Limit::Depth)),
+        }
     };
 
     Ok(finish(verdict, None, nodes, limit, &table))
 }
 
 /// Replays a line from the opening position and checks that it wins.
-fn replay(start: &State, line: &[Move]) -> Result<(), String> {
+fn replay<G: Game>(game: &G, start: &G::Position, line: &[G::Action]) -> Result<(), String> {
     let mut state = start.clone();
-    for (index, &mv) in line.iter().enumerate() {
-        state
-            .apply(mv)
+    for (index, &action) in line.iter().enumerate() {
+        game.apply(&mut state, action)
             .map_err(|error| format!("move {} of {}: {error}", index + 1, line.len()))?;
     }
-    if state.is_won() {
+    if game.is_won(&state) {
         Ok(())
     } else {
-        Err(format!(
-            "line ends with {} of 104 cards on the foundations",
-            state.foundation_count()
-        ))
+        Err("the line does not end in a win".to_string())
     }
 }
