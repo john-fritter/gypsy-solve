@@ -801,3 +801,70 @@ the parallel runner.
 sweep was run to test. Also rejected: reading the improved exchange rate as a
 reason to defer dominances again. Four orders of magnitude is not a tuning
 problem.
+
+---
+
+## 2026-09-14 — The two cheap dominances are dead: unsound gated wrong, redundant gated right
+
+**Status:** firm
+
+Neither *interchangeable empty destinations* nor *whole-column-onto-empty*
+goes in. Both were listed in `DESIGN.md` as provable in a paragraph and
+unconditional. Both are wrong as stated, and worthless once corrected.
+
+**The argument they rest on.** Each says a move only relabels the position:
+with two empty columns it does not matter which one a card goes to, and moving
+a whole face-up column onto an empty column just exchanges two columns. The
+first half is true. `core/src/state.rs` now pins it — the move's result is
+exactly the position before it with the two columns swapped.
+
+**Why unconditional is unsound.** The stock deals card *i* to column *i*,
+empty columns included. So while cards remain undealt the columns are not
+interchangeable: exchanging two of them changes which card lands on the run
+and which lands on the empty space. The second new test is the concrete case —
+an eight alone in column 0 with the stock about to deal it a king, versus the
+same eight moved to column 1 where the stock deals it a seven. One buries the
+eight, the other builds a run of two, and no permutation of the columns turns
+either position into the other. This is the same gate recorded on 2026-09-11
+for canonicalisation, and it applies here for the same reason. A move that
+reaches a genuinely different position cannot be dropped without an argument,
+and the offered argument is the one that just failed.
+
+**Why gated is redundant.** Gate it on an empty stock and the argument holds —
+nothing addresses a column by index again, so the exchange really is a
+relabelling. But `Zobrist::key` folds the columns order-insensitively under
+exactly that condition, so the child's key *is* the parent's key, and the
+parent is in the table because the search is standing on it. The table already
+skips the child. The dominance removes nothing the search was going to do.
+
+**Measured**, both cuts implemented and then reverted. 50 Klondike deals, 3M
+budget: **node counts identical on every deal**, to the node, and no verdict
+changed. That is the redundancy, observed rather than argued. Throughput,
+measured single-threaded and interleaved to keep worker contention out of it:
+Klondike about 4% faster (1.5% to 6% across deals), Gypsy about 1% slower
+(0.4% to 2%). Klondike gains more because there the cut needs no gate —
+nothing ever addresses a pile from outside, so its key sorts piles throughout.
+
+A first pass measured 11% on Klondike and 5.8% on Gypsy. Both were four
+workers on four cores and both were mostly contention. The interleaved
+single-threaded numbers are the ones above.
+
+**Rejected:** shipping the cut for the Klondike gain. It is a throughput
+tweak, not a dominance, it is a small loss on the game that actually gets
+published, and `CLAUDE.md` puts correctness ahead of speed until validation
+passes. Carrying a rule that must be re-proved whenever the key changes, in
+exchange for nothing measurable, is the complexity that file says to resist.
+
+**What this costs the plan.** `DESIGN.md`'s dominance list had three entries
+and now has one: safe autoplay, the dangerous one. The two that were meant to
+be easy wins and to warm up the regression harness were neither. So the route
+from a 26% unknown bucket to the 5% gate now runs entirely through safe
+autoplay, or through something that is not a dominance at all. That is worth
+knowing before the harness work rather than after.
+
+**What it was worth anyway.** The proof obligation in `CLAUDE.md` did exactly
+what it is there for: two inherited-looking rules, both stated confidently in
+the design document, both wrong. Had either gone in ungated it would have
+pruned winning lines, and the only symptom would have been a Gypsy winnability
+figure that came out slightly too low — with no test failing and nothing to
+notice.

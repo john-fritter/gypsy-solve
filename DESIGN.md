@@ -197,15 +197,23 @@ budget-exhausted.
    that it cannot discard a winning line. Candidates, cheapest and most clearly
    provable first:
 
-   1. *Interchangeable empty destinations.* With two or more empty columns,
-      moving a card to one rather than another gives positions identical up to
-      a relabelling. Generate one.
-   2. *Whole-column-onto-empty.* Moving an entire face-up column with nothing
-      buried under it onto an empty column is a relabelling and not a move.
-      `legal_moves` emits it today.
+   1. ~~*Interchangeable empty destinations.*~~ **Dead, 2026-09-14.** Both this
+      and the next rest on the same relabelling argument, and it fails the
+      same way: while the stock holds cards the columns are not
+      interchangeable, because the stock deals card *i* to column *i*. Gated
+      on an empty stock the argument is sound — and then the transposition
+      key already folds column order, so the child has the parent's key and
+      the table skips it anyway. Unsound before the gate, redundant after it.
+      Measured: zero change in nodes expanded over 50 Klondike deals. See
+      `DECISIONS.md`, 2026-09-14.
+   2. ~~*Whole-column-onto-empty.*~~ **Dead, 2026-09-14.** Same argument, same
+      two failures. Pinned by tests in `core/src/state.rs`.
    3. *Safe autoplay.* The dangerous one, and the reason `CLAUDE.md` says to
       assume any inherited dominance is wrong. It must be proved separately for
-      the worry-back and no-worry-back cases, or not used.
+      the worry-back and no-worry-back cases, or not used. **With the two
+      cheap candidates dead this is the only dominance left on the list**, so
+      either it is made to work or the search needs something that is not a
+      dominance at all.
 
    Every one of these is measured on the same Klondike deal set, and Klondike
    is now a regression test with teeth: a dominance may change node counts and
