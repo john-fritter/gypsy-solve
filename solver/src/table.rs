@@ -1,49 +1,26 @@
-//! The transposition table.
+//! The transposition table: the set of positions already expanded.
 //!
-//! The distinction this table exists to keep is between a position that was
-//! **refuted** — its whole subtree was searched and held no win — and one that
-//! was merely **abandoned** because the search ran out of depth. Collapsing
-//! the two is the bug that turns a budget-exhausted search into a confident
-//! "unsolvable", which is precisely the verdict this project is not allowed to
-//! guess at. A refutation is reusable from anywhere; an abandonment is only
-//! worth anything to a visit that has no more depth to spend than the one that
-//! recorded it.
+//! Nothing more than that is needed, and the previous version's extra
+//! machinery was actively harmful. It recorded how much depth a search had in
+//! hand when it gave up, and answered a later probe only when that later visit
+//! had no more depth to spend. Depth-first search reaches the same position
+//! with a different amount of depth in hand almost every time, so most probes
+//! missed and the position was searched again — 20 to 57 times over, measured.
 //!
-//! The table is a fixed-size direct-mapped array so that memory is decided up
-//! front rather than discovered during a batch run. Eviction costs work and
-//! nothing else: a lost entry is re-searched, never mis-answered.
+//! Skipping any position that has already been expanded is sound for the
+//! question being asked. Expanding a position generates all of its children,
+//! so along a shortest winning line every position is either expanded or
+//! skipped-because-expanded, and the expansion of the second-to-last produces
+//! the win. Depth never enters the argument. See `search` for the full
+//! version.
+//!
+//! Fixed size and direct mapped, so memory is decided up front rather than
+//! discovered during a batch run. Eviction costs a re-expansion and nothing
+//! else.
 
-/// What a probe found.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum Probe {
-    /// Searched exhaustively before, and lost. Sound to reuse at any depth.
-    Refuted,
-    /// Searched before with at least this much depth and nothing was found.
-    /// Not a refutation. `repetition_only` says whether that earlier search
-    /// was stopped by nothing worse than a loop back onto its own path, which
-    /// the caller needs in order to know whether its own proof survives.
-    Exhausted { repetition_only: bool },
-    /// Nothing useful known; search it.
-    Unknown,
-}
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum Kind {
-    Empty,
-    /// Gave up, with the reason recorded: a loop, or a real limit.
-    Abandoned {
-        repetition_only: bool,
-    },
-    Refuted,
-}
-
-#[derive(Clone, Copy)]
-struct Slot {
-    key: u128,
-    /// Depth the recording search still had in hand. Meaningless when refuted.
-    depth: u32,
-    kind: Kind,
-}
+/// A slot. An all-zero key means empty; a real key of zero would cost one
+/// re-expansion every time it came up, at a probability of `2^-128`.
+type Slot = u128;
 
 pub struct Table {
     slots: Vec<Slot>,
@@ -53,18 +30,11 @@ pub struct Table {
 
 impl Table {
     /// Builds a table holding `entries` rounded up to a power of two, at least
-    /// 1024. Each entry costs 24 bytes.
+    /// 1024. Each entry costs 16 bytes.
     pub fn with_entries(entries: usize) -> Table {
         let capacity = entries.max(1024).next_power_of_two();
         Table {
-            slots: vec![
-                Slot {
-                    key: 0,
-                    depth: 0,
-                    kind: Kind::Empty,
-                };
-                capacity
-            ],
+            slots: vec![0; capacity],
             mask: capacity - 1,
             filled: 0,
         }
@@ -83,56 +53,19 @@ impl Table {
         self.filled
     }
 
-    fn index(&self, key: u128) -> usize {
-        (key as u64 as usize) & self.mask
+    /// True when this position has already been expanded.
+    pub fn contains(&self, key: u128) -> bool {
+        key != 0 && self.slots[(key as u64 as usize) & self.mask] == key
     }
 
-    /// What is known about `key` for a search with `depth` left to spend.
-    pub fn probe(&self, key: u128, depth: u32) -> Probe {
-        let slot = self.slots[self.index(key)];
-        if slot.kind == Kind::Empty || slot.key != key {
-            return Probe::Unknown;
+    /// Records that this position has been expanded, evicting whatever shared
+    /// its slot.
+    pub fn insert(&mut self, key: u128) {
+        let index = (key as u64 as usize) & self.mask;
+        if self.slots[index] == 0 {
+            self.filled += 1;
         }
-        match slot.kind {
-            Kind::Refuted => Probe::Refuted,
-            // A shallower previous visit says nothing about a deeper one.
-            Kind::Abandoned { repetition_only } if slot.depth >= depth => {
-                Probe::Exhausted { repetition_only }
-            }
-            _ => Probe::Unknown,
-        }
-    }
-
-    /// Records that `key` was searched exhaustively and lost.
-    pub fn record_refuted(&mut self, key: u128) {
-        self.write(Slot {
-            key,
-            depth: 0,
-            kind: Kind::Refuted,
-        });
-    }
-
-    /// Records that `key` was searched with `depth` in hand and abandoned.
-    /// `repetition_only` means nothing worse than a loop stopped it.
-    pub fn record_abandoned(&mut self, key: u128, depth: u32, repetition_only: bool) {
-        self.write(Slot {
-            key,
-            depth,
-            kind: Kind::Abandoned { repetition_only },
-        });
-    }
-
-    fn write(&mut self, slot: Slot) {
-        let index = self.index(slot.key);
-        let existing = self.slots[index];
-        match existing.kind {
-            Kind::Empty => self.filled += 1,
-            // A proof is worth more than a partial result, and worth more than
-            // a partial result for a different position.
-            Kind::Refuted if slot.kind != Kind::Refuted && existing.key != slot.key => return,
-            _ => {}
-        }
-        self.slots[index] = slot;
+        self.slots[index] = key;
     }
 }
 
@@ -141,65 +74,36 @@ mod tests {
     use super::*;
 
     #[test]
-    fn an_unseen_key_is_unknown() {
+    fn an_unseen_key_is_absent() {
         let table = Table::with_entries(1024);
-        assert_eq!(table.probe(12345, 10), Probe::Unknown);
+        assert!(!table.contains(12345));
     }
 
     #[test]
-    fn a_refutation_is_reusable_at_any_depth() {
+    fn an_inserted_key_is_found_again() {
         let mut table = Table::with_entries(1024);
-        table.record_refuted(99);
-        assert_eq!(table.probe(99, 1), Probe::Refuted);
-        assert_eq!(table.probe(99, 10_000), Probe::Refuted);
+        table.insert(99);
+        assert!(table.contains(99));
+        assert_eq!(table.filled(), 1);
     }
 
     #[test]
-    fn an_abandoned_entry_only_answers_shallower_visits() {
-        let mut table = Table::with_entries(1024);
-        table.record_abandoned(7, 50, false);
-        let exhausted = Probe::Exhausted {
-            repetition_only: false,
-        };
-        assert_eq!(table.probe(7, 50), exhausted);
-        assert_eq!(table.probe(7, 20), exhausted);
-        // More depth than last time means there is more to look at.
-        assert_eq!(table.probe(7, 51), Probe::Unknown);
-    }
-
-    #[test]
-    fn an_abandoned_entry_is_never_reported_as_a_refutation() {
-        let mut table = Table::with_entries(1024);
-        table.record_abandoned(3, 1000, false);
-        assert_ne!(table.probe(3, 10), Probe::Refuted);
-    }
-
-    #[test]
-    fn an_abandoned_entry_remembers_why_it_gave_up() {
-        let mut table = Table::with_entries(1024);
-        table.record_abandoned(11, 10, true);
-        table.record_abandoned(12, 10, false);
-        assert_eq!(
-            table.probe(11, 5),
-            Probe::Exhausted {
-                repetition_only: true
-            }
-        );
-        assert_eq!(
-            table.probe(12, 5),
-            Probe::Exhausted {
-                repetition_only: false
-            }
-        );
-    }
-
-    #[test]
-    fn a_full_key_mismatch_in_the_same_bucket_is_unknown() {
+    fn a_full_key_mismatch_in_the_same_bucket_is_absent() {
         let mut table = Table::with_entries(1024);
         let capacity = table.capacity() as u128;
-        table.record_refuted(5);
+        table.insert(5);
         // Same bucket, different key: the stored key is compared in full.
-        assert_eq!(table.probe(5 + capacity, 10), Probe::Unknown);
+        assert!(!table.contains(5 + capacity));
+    }
+
+    #[test]
+    fn eviction_replaces_rather_than_corrupts() {
+        let mut table = Table::with_entries(1024);
+        let capacity = table.capacity() as u128;
+        table.insert(7);
+        table.insert(7 + capacity);
+        assert!(table.contains(7 + capacity));
+        assert!(!table.contains(7), "evicted, so it will be expanded again");
     }
 
     #[test]

@@ -263,7 +263,8 @@ number, and the baseline is needed anyway as the control for dominance work.
 
 ## 2026-09-11 — The table separates refutation from abandonment
 
-**Status:** firm
+**Status:** superseded by *The table is a set of expanded positions, with no
+depth* (2026-09-13)
 
 A transposition entry records either that a position was searched to
 exhaustion and lost (**refuted**), or that the search gave up on it with a
@@ -474,8 +475,8 @@ redeals return to the start of what is left.
 
 ## 2026-09-12 — Repetitions cost the table an entry, not the root its proof
 
-**Status:** firm. Supersedes *Repetitions on the current path are cut
-conservatively* (2026-09-11).
+**Status:** superseded by *The table is a set of expanded positions, with no
+depth* (2026-09-13)
 
 A frame now records *why* it did not finish: nothing, a repetition, or a limit.
 A root that ran out of nothing worse than repetitions returns `unsolvable`,
@@ -624,3 +625,111 @@ inside it is the regression test.
 **What is not in doubt.** Nothing here suggests the search is wrong. The
 verdicts are monotone in budget, the proven-unsolvable rate stays under its
 ceiling, and every reported win replays. It is the right search, built badly.
+
+---
+
+## 2026-09-13 — The table is a set of expanded positions, with no depth
+
+**Status:** firm. Supersedes *The table separates refutation from abandonment*
+(2026-09-11) and *Repetitions cost the table an entry, not the root its proof*
+(2026-09-12).
+
+A transposition entry is now a key and nothing else. A position already
+expanded is skipped. Positions are never re-expanded, loops need no special
+handling, and the refutation/abandonment distinction is gone along with the
+depth that made it necessary.
+
+**The argument.** Expanding a position generates every child. Take a shortest
+winning line `s0 → … → sk`. If `sj` has been expanded then `s(j+1)` was
+generated, and the search either won on it, expanded it, or skipped it as
+already expanded — so `s(j+1)` gets expanded either way. By induction every
+position on the line is expanded, and expanding `s(k-1)` produces the win.
+Depth never enters it. Nor do repetitions: an ancestor on the current path is
+already expanded, so the table skips it with no separate check.
+
+What breaks the induction is a position that is *never* expanded, which only
+the node budget and the stack guard can cause. So `unsolvable` is claimed
+exactly when neither was hit, and the whole three-way verdict falls out of two
+booleans instead of the propagating `Cut` lattice it replaced.
+
+**Why the superseded designs existed.** Both were sound. Both were built around
+a depth limit that should not have been there. Indexing entries by remaining
+depth meant a probe answered only a visit with no more depth to spend, and
+depth-first search arrives with a different amount in hand nearly every time —
+hence the 20 to 57 times re-expansion measured on 2026-09-11, and the failure
+to converge with budget measured on 2026-09-12.
+
+Getting here went through those designs rather than around them. The repetition
+work is what first produced `unsolvable` verdicts, which is what made Klondike
+validation discriminate at all, and the induction that justified inheriting a
+repetition through the table is the same induction that turns out to justify
+dropping depth entirely. The intermediate steps were how the argument was
+found.
+
+**Measured**, same 50 Klondike deals, 3M budget, one core:
+
+| Table | Solvable | Unsolvable | Unknown | Resolved | Wall |
+|---|---|---|---|---|---|
+| depth-indexed | 16 | 7 | 27 | 46% | 373s |
+| expanded-set | 21 | 9 | 20 | 60% | 330s |
+
+Seven deals moved, every one of them from `unknown` to decided, and no verdict
+contradicted the old search — nothing previously decided changed, which is the
+check that matters. It also ran slightly faster while resolving more, so the
+extra coverage is not being bought with time.
+
+Raw results in `docs/results/klondike-3M-50deals-expanded-set.jsonl` against
+the first 50 rows of `klondike-3M-200deals.jsonl`.
+
+**Keep the gain in proportion.** Eighteen points, not the twenty- to fiftyfold
+the re-expansion figure might suggest. Killing re-expansion means a budget unit
+now buys a position the search has not seen, rather than one it has seen fifty
+times, so coverage rose by about that factor — but Klondike's hard deals need
+far more than three million distinct positions, and most of the new coverage
+lands short of them.
+
+**`max_depth` survives only as a stack guard.** It bounds memory against a
+pathological descent; nothing is re-expanded because of it, and hitting it
+means something is wrong rather than that it needs raising. Default 100,000.
+
+**Slots are 16 bytes**, down from 24, since only the key is stored. An all-zero
+key reads as an empty slot, which would cost one re-expansion per encounter at
+a probability of `2^-128`.
+
+**This does not close the gap.** Klondike still leaves a large unknown bucket,
+and Solvitaire resolves essentially all 50,000 of its instances. The remaining
+distance is dominances, which are now worth having: a cut that removes part of
+the tree was nearly worthless while whatever remained was searched fifty times
+over.
+
+---
+
+## 2026-09-14 — No Gypsy batch until Klondike's unknown bucket shrinks
+
+**Status:** firm
+
+Gypsy batch runs wait on Klondike validation getting below roughly **5%
+unknown** on a thousand deals. Publishing a Gypsy figure waits on roughly **1%**.
+
+At 40% unknown, where the solver stood on 2026-09-13, the validation bracket
+spans about thirty points. The published 81.945% sits inside it and so does
+almost everything else, so the check passes without discriminating: a search
+that misses wins systematically and one that is merely slow produce the same
+result. Running thousands of Gypsy deals against a solver in that state buys a
+number nobody should believe, after days of compute on a box that has to stay
+up for other things.
+
+The second threshold is arithmetic rather than judgement. The unknown bucket is
+a hard floor on the width of any interval that can honestly be quoted, because
+every unknown deal could go either way. A ±0.5% claim with a 5% unknown bucket
+is not a tighter measurement, it is a false one. `CLAUDE.md` already forbids
+reporting a bounded search as exact; this is the same rule with a number
+attached.
+
+**Rejected:** running the batch anyway and reporting a lower bound. That is
+legitimate and it is what a capped worry-back search will have to do, but a
+lower bound of "at least 40% of Gypsy deals are winnable" is not a result worth
+days of compute, and it would make the project look finished when it is not.
+
+**Not a reason to delay:** the two cheap dominances. They are provable in a
+paragraph each, and Klondike is what checks them.
