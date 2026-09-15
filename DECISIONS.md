@@ -1202,3 +1202,265 @@ has committed to.
 **What this does not do.** Nothing for the full game. The headline figure is
 the worry-back one and it still has no dominance at all. This closes the
 validation hole; it does not move the number.
+
+## 2026-09-15 — Measured: Klondike wins almost never need worry-back
+
+**Status:** firm as a measurement of Klondike. What it points at for the search
+is provisional until the same measurement exists for Gypsy.
+
+`DESIGN.md` sanctions capping the number of worry-backs as a valid lower bound
+if the full search proves too expensive. Before building a cap, the cheap
+question is whether one would bind at all: how much worry-back do the wins we
+already have actually contain?
+
+**Method.** `gypsy klondike --json` now emits the winning line, the way
+`gypsy solve --json` always has. The 29 deals that `klondike-probe-48M-50deals`
+proved solvable were re-solved at the same budget and their lines counted.
+Both games print a worry-back as `F<slot>>T<pile>`, so one counter serves both.
+Raw lines in `docs/results/klondike-full-48M-29wins-lines.jsonl`.
+
+27 of the 29 reproduced the recorded run exactly, node for node. Seeds 3 and 16
+were killed by the memory cgroup at the 3 GiB table the original run used and
+were re-run at 1 GiB; they expanded 705 and 6 more nodes — table displacement,
+exactly what `table.rs` predicts — and returned identical line lengths.
+
+**How much worry-back a winning line contains:**
+
+| Worry-backs | Lines | Cumulative |
+|---|---|---|
+| 0 | 17 | 58.6% |
+| 1 | 7 | 82.8% |
+| 2 | 1 | 86.2% |
+| 3 | 1 | 89.7% |
+| 4 | 2 | 96.6% |
+| 42 | 1 | 100% |
+
+**This is a measurement of the search, not of the game**, and seed 38 is the
+proof of that. Its line uses 42 worry-backs across 1,351 moves — and the
+restricted arm solves the same deal outright. All 42 were the search wandering.
+Move ordering puts worry-back second to last, so these counts are biased low;
+the bias runs the right way for a cap, because a line using *k* worry-backs
+witnesses that a win exists within *k*. It says nothing about what was needed.
+
+**The stronger result: 28 of the 29 wins are winnable with worry-back off, and
+that is proven rather than inferred.** Two independent witnesses, either of
+which settles a deal:
+
+- the restricted arm returns `solvable` — 26 deals;
+- the full-arm line contains no worry-back at all — which adds seeds 3 and 47.
+
+The second witness is worth having because the restricted arm ran at 3M and the
+full arm at 48M, so a restricted `unknown` is often just a deal that could not
+be afforded. Seeds 3, 16 and 47 are precisely the three most expensive wins in
+the set — 22.3M, 13.4M and 29.8M nodes — and two of them have zero-worry-back
+lines. It is sound because `NO_WORRY_BACK` suppresses the foundation-to-pile
+actions and nothing else, pinned by
+`no_worry_back_suppresses_only_the_foundation_to_pile_actions`, so a line using
+none is already a line of the restricted game.
+
+That leaves **seed 16 alone** unestablished, and its line uses exactly one
+worry-back. Across fifty Klondike deals, worry-back is not known to have changed
+a single verdict.
+
+**What this does not say.** Klondike is not Gypsy. Gypsy has eight foundations
+to Klondike's four, eight columns, no waste, a permissive any-alternating-colour
+group move, and a stock that deals onto the columns. The Gypsy worry-back delta
+is the headline figure this project exists to produce and **nothing here
+measures it.** Gypsy's delta may be large while Klondike's is near zero.
+
+**What it does say** is about the search, and it holds regardless: the published
+arm pays worry-back's branching factor at every single node, for something that
+across fifty deals changed at most one verdict. That is the wrong price, and it
+is the first concrete reason to think the full arm's 22% unknown bucket is
+partly self-inflicted rather than intrinsic.
+
+**Consequence: a capped arm is worth building, and one subtlety has to be
+settled first.** Worry-backs spent is a property of the *path*, not of the
+position. Under a table that stores positions, a deal reached with the cap
+exhausted is indistinguishable from the same position reached with the cap
+untouched, and whichever arrives first suppresses the other. So a capped search
+is a lower bound twice over, and **exhausting it proves only "no win within
+*k*", never `Unsolvable`.** The verdict mapping must be `Solvable` → `Solvable`,
+`Unsolvable` → `Unknown`, `Unknown` → `Unknown`. This is the same shape of error
+as the safe-autoplay repair recorded above — a claim about the path being
+checked against a table that has forgotten the path — and it is written down
+here so nobody re-derives it as a bug.
+
+**Considered, not taken:** putting worry-backs-spent into the transposition key.
+That makes the cap sound and the `Unsolvable` verdict available again, but it
+multiplies the state space by *k+1* and gives up exactly the merging the table
+exists for. Not measured, so not rejected on evidence — recorded as the
+alternative and the reason it was passed over.
+
+**Candidate for later, not a decision:** once a line has spent its cap, the rest
+of the game is exactly the restricted game, so safe autoplay is sound again from
+that point. Attractive, and subject to the same path-versus-position problem, so
+it needs its own proof rather than an appeal to this entry.
+
+## 2026-09-15 — The Gypsy full arm resolves nothing, and a depth cap does not rescue it
+
+**Status:** firm as a measurement.
+
+Every Gypsy result in this repo was the restricted arm. The headline figure is
+the worry-back one, so the full arm was run — 50 deals, 5M budget, 512 MiB
+table, `max_depth` 100,000, which are the restricted arm's parameters exactly,
+so the two are directly comparable. Raw results in
+`docs/results/gypsy-full-5M-50deals.jsonl`.
+
+| Gypsy, 50 deals, 5M | Solvable | Unsolvable | Unknown |
+|---|---|---|---|
+| worry-back off, with safe autoplay | 12 | 0 | 38 |
+| worry-back on | **0** | 0 | **50** |
+
+All 50 stopped on the budget; none hit the depth guard. Neither arm is
+thrashing — both fill about 5M distinct positions out of 5M expansions, so this
+is the size of the reachable graph, not a repeat of the table bug.
+
+**The headline figure is not reachable by direct search.** The worry-back delta
+needs both arms, and the full arm resolves nothing whatsoever. Klondike's full
+arm at least resolves 33 of 50; Gypsy's resolves zero. Whatever else follows,
+no amount of budget on this shape of search produces the number this project
+exists to produce.
+
+**Free, and now the most valuable cheap change available.** The restricted
+game's moves are a subset of the full game's, so a restricted `solvable` is a
+full `solvable` — the same line replays move for move. Carrying the restricted
+arm's verdicts across takes the full arm from 0 of 50 to **12 of 50** at zero
+compute. On Klondike the same trick was worth 2 deals of 50 and was ranked low;
+on Gypsy it is worth every verdict the full arm has. The converse holds too: a
+full-arm `unsolvable` is a restricted `unsolvable`. Every deal is solved twice
+by design, so neither arm should be re-deriving what the other proved.
+
+**Gypsy winning lines are enormous, and nobody had looked.** The recorded
+restricted-arm wins run **1,301 to 99,982 moves**, against Klondike's 136 to
+467. Seed 40's line ends 18 frames short of the 100,000 depth guard. A 104-card
+game needs about 104 foundation plays; the rest is shuffling. `DESIGN.md` calls
+that guard "not a tuning knob — hitting it is a sign something is wrong rather
+than a limit to raise", and it is very nearly binding. The 4 KiB per frame it
+permits is exactly the memory cost recorded on 2026-09-15.
+
+**The obvious inference from that is wrong, and it was tested rather than
+assumed.** If the search finds wins by plunging, capping depth should find
+shorter wins sooner. Measured on four deals whose uncapped wins are known,
+restricted arm, 5M budget. Raw results in
+`docs/results/gypsy-nwb-5M-depth-sweep.jsonl`.
+
+| Seed | uncapped | cap 200 | cap 400 | cap 800 | cap 1600 |
+|---|---|---|---|---|---|
+| 21 | 1,301 | — | — | — | 1,301 |
+| 9 | 1,520 | — | — | **799** | 1,520 |
+| 10 | 8,480 | — | — | — | — |
+| 16 | 7,953 | — | — | — | — |
+
+A dash is `unknown` after burning the whole 5M. Only seed 9 improved. Seed 21
+needs a cap of 1,600 to find the win it finds uncapped in 2,167 nodes, and
+seeds 10 and 16 resolve at no cap tried.
+
+**Why it fails, and it is worth stating because it characterises the game.**
+A cap makes depth-first search backtrack constantly, and it then drowns in the
+*breadth* of a game where any alternating-colour sequence moves as a unit and
+almost every position offers dozens of shuffles. Uncapped, it drowns in depth
+instead. There is no middle setting, and a capped search that fails costs the
+entire budget rather than failing cheaply. **Rejected as a lever**, on this
+evidence; one deal improving is not enough to carry it.
+
+**What this does not settle.** Shorter wins may well exist for seeds 10 and 16 —
+the test shows only that a depth-capped search does not find them within 5M
+nodes, which is a statement about the search. Line length remains a measurement
+of how the solver wanders, not of the game, exactly as the worry-back counts
+were.
+
+## 2026-09-15 — Both arms in one run, with each arm's proof carried to the other
+
+**Status:** firm.
+
+`DESIGN.md` has always described the experiment as every deal solved twice,
+worry-back off and then on. That meant two independent batch runs, each
+re-deriving what the other had already proved. `gypsy batch --both-arms` solves
+both rulesets per deal and writes a record for each.
+
+**The two implications, and they are not symmetric.** The restricted game
+generates a subset of the full game's moves and differs in nothing else, so:
+
+- **a restricted win is a full win** — every move of the line is legal in the
+  full game, so it replays there move for move;
+- **a full refutation is a restricted refutation** — an exhausted full search
+  visited every position the subset could have reached.
+
+Neither carries back. A full win may have used worry-back, which the restricted
+game cannot do; a restricted refutation says nothing about a game with strictly
+more moves in it. That second gap *is* the worry-back delta, which is why it
+cannot be short-circuited.
+
+**The carried line is replayed, not assumed.** A claimed win has been replayed
+before it was believed since 2026-09-11, and a carried claim is still a claim.
+A line that failed to replay under the full game would stop the run the same
+way a bad search result does.
+
+**Only the first carry is expected to pay.** Refuting the full game means
+exhausting a strictly larger graph, so an arm that can do that at a given
+budget can almost always refute the restricted game directly. Klondike seed 2
+refutes in both arms independently, at 909 and 1,231 nodes. The second carry is
+kept because it is sound and free, not because it is expected to fire.
+
+**Measured**, 50 Gypsy deals, 5M budget, 512 MiB table — the parameters of the
+two runs it replaces, so the comparison is exact. Raw results in
+`docs/results/gypsy-both-5M-50deals.jsonl`.
+
+| Gypsy, 5M | Solvable | Unknown | of which carried |
+|---|---|---|---|
+| no-worry-back | 12 | 38 | 0 |
+| full | **12** | 38 | **12** |
+
+The full arm resolved **0 of 50 on its own and 12 of 50 with the carry**. The
+restricted arm reproduced `gypsy-nwb-5M-50deals-autoplay` exactly — verdict,
+nodes and line length on all 50 — and every searched full-arm record reproduced
+`gypsy-full-5M-50deals` exactly. The carried seeds are exactly the restricted
+arm's twelve wins.
+
+Nodes fell from 449,029,778 to 389,029,778, **13.4% less** for twelve more
+verdicts. The saving is precisely the 5M the full arm was spending on each of
+those twelve deals and now spends on none; how large it is in general depends
+on what the full arm would otherwise have spent, and here that was the whole
+budget every time.
+
+**`verdict_from` is new on every record**, naming the arm that established the
+verdict — `"search"`, or the ruleset it came from. A carried verdict spent no
+nodes and filled no table, and a reader counting work or auditing which arm
+proved what should not have to infer it from a zero. Single-arm runs write
+`"search"` throughout, so the schema does not fork.
+
+**Resume needed two fixes, and both were silent-corruption risks** that only
+exist once a deal writes two records. Both arms go down in one write, but a
+kill can still land between them:
+
+- `recorded_seeds` now counts a seed as done only when every ruleset the run
+  writes is present. Without that, a resumed run skips a deal that has one arm
+  and the results file is quietly missing it.
+- A *complete but orphaned* record left at the tail is dropped before resuming.
+  Leaving it would double-count that arm once the deal is solved again — which
+  is worse than the first failure, because it inflates a count rather than
+  shrinking one.
+
+Both are pinned by tests. Only the tail can be incomplete, which is why the
+second truncates rather than rewriting the file.
+
+**The validation script summarises the arms separately and never pools them.**
+It used to refuse a mixed file, which was right when nothing produced one.
+Pooling two different games would manufacture a figure belonging to neither,
+and the danger is a manufactured *pass*.
+
+**A hole found while testing that, and it predates this change.**
+`analysis/klondike_validation.py` never checked which game it was reading, so
+handed a Gypsy file it printed `CONSISTENT: the published figure is inside the
+bracket` against Klondike's 81.945%. It now refuses any run that does not say
+`"game":"klondike"`, including one that says nothing — an unlabelled file is
+exactly the case that cannot be checked. `gypsy solve --json` now names its
+game too, as the Klondike and batch writers already did. The two Gypsy files in
+`docs/results` written before this are unlabelled and are correctly refused.
+
+**Rejected: a `--carry-from FILE` flag** reading a previous arm's results. It
+needs seed matching, budget and ruleset validation, and a policy for missing
+seeds — more plumbing and more ways to be wrong — and it still forces two
+sequential runs to get what one run now does. Solving the pair together is what
+makes the carry free.

@@ -201,7 +201,7 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
                         concat!(
                             r#"{{"game":"klondike","seed":{},"ruleset":"{}","#,
                             r#""verdict":"{}","limit":"{}","#,
-                            r#""nodes":{},"line_length":{},"elapsed_ms":{}}}"#
+                            r#""nodes":{},"line_length":{},"elapsed_ms":{},"line":{}}}"#
                         ),
                         seed,
                         ruleset_name(args.no_worry_back),
@@ -210,6 +210,7 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
                         report.nodes,
                         report.line.as_ref().map_or(0, |line| line.len()),
                         report.elapsed.as_millis(),
+                        line_json(report.line.as_deref()),
                     )?;
                 } else {
                     writeln!(
@@ -317,21 +318,29 @@ fn write_report(
     Ok(())
 }
 
-/// A flat JSON object, one per deal, for the batch runner to collect.
-fn json_report(seed: u64, args: &SolveArgs, report: &Report<Move>) -> String {
-    let line = match &report.line {
+/// The winning line as a JSON value: the move list as a string, or `null`.
+///
+/// A verdict without the line behind it cannot be audited, and counting what a
+/// winning line actually uses is a measurement in its own right.
+fn line_json<A: std::fmt::Display>(line: Option<&[A]>) -> String {
+    match line {
         Some(line) => format!(
             "\"{}\"",
             line.iter()
-                .map(|mv| mv.to_string())
+                .map(|action| action.to_string())
                 .collect::<Vec<_>>()
                 .join(" ")
         ),
         None => "null".to_string(),
-    };
+    }
+}
+
+/// A flat JSON object, one per deal, for the batch runner to collect.
+fn json_report(seed: u64, args: &SolveArgs, report: &Report<Move>) -> String {
+    let line = line_json(report.line.as_deref());
     format!(
         concat!(
-            r#"{{"seed":{},"ruleset":"{}","verdict":"{}","limit":"{}","nodes":{},"#,
+            r#"{{"game":"gypsy","seed":{},"ruleset":"{}","verdict":"{}","limit":"{}","nodes":{},"#,
             r#""line_length":{},"elapsed_ms":{},"node_budget":{},"max_depth":{},"#,
             r#""table_capacity":{},"table_filled":{},"line":{}}}"#
         ),
@@ -391,4 +400,29 @@ fn apply_all(
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A missing line is JSON `null`, not an empty string: a record with no
+    /// line is a deal that was never solved, and the two must not read alike
+    /// to anything counting what winning lines contain.
+    #[test]
+    fn a_line_is_null_when_there_is_no_win() {
+        assert_eq!(line_json::<Move>(None), "null");
+    }
+
+    #[test]
+    fn a_line_is_the_move_list_as_one_string() {
+        let line = [
+            Move::Stock,
+            Move::WorryBack {
+                foundation: 7,
+                to: 4,
+            },
+        ];
+        assert_eq!(line_json(Some(&line[..])), r#""S F7>T4""#);
+    }
 }
