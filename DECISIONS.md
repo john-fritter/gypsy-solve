@@ -958,3 +958,60 @@ called it.
 pairs are as likely at any size, and Gypsy deal 2 was thrashing in a table 1%
 full. Also rejected: N-way set association, which would work, for being more
 machinery than probing needs at these load factors.
+
+---
+
+## 2026-09-15 — The batch runner is resumable by seed, and refuses runs that will not fit
+
+**Status:** firm
+
+`gypsy batch` solves many deals with bounded concurrency and appends one JSON
+object per deal as that deal finishes. It is generic over the `Game` trait for
+the same reason the search is: the runner that publishes the Gypsy numbers has
+to be the runner Klondike validated, so `--game klondike` is the same code
+path and a 1,000-deal validation set is the same command.
+
+**Records are written and flushed per deal**, not buffered to the end. A run
+killed at hour six keeps everything it proved in the first six.
+
+**Resume is by seed, read back out of the output file.** No separate state
+file and no checkpoint format: the results *are* the checkpoint, so they cannot
+disagree with one. `--resume` skips every seed already recorded; without it,
+starting onto a non-empty file is refused rather than appended to or clobbered.
+
+**A torn final record is truncated on resume**, and this is the one piece of
+real machinery here. A kill mid-write leaves a record with no newline after
+it. Appending to that file runs the next record onto the end of the broken one,
+which destroys a *complete* result as well as the torn one — and because the
+resume scan counts the good record as done, its deal then goes silently missing
+from the batch. That is precisely the failure a resumable runner exists to
+prevent, and it was in the first version until a test with a deliberately torn
+file caught it. Truncating back to the last whole line costs the one deal that
+was genuinely interrupted.
+
+**A worker is charged for its stack as well as its table.** The run refuses to
+start when workers times (table + stack) exceeds `MemAvailable`. Before the
+probing table landed earlier today the stack term would have been noise; now
+the search descends instead of thrashing and a 12M-node Klondike solve ran
+413 MiB over its table. The estimate is `max_depth` frames at about four KiB,
+so roughly 390 MiB at the default depth. `DESIGN.md`'s "four workers on
+fritter.lol" needs re-reading with that in mind: four workers at 1 GiB of table
+each want about 5.5 GiB, and the box had about 4.9 GiB available.
+
+**Free space is checked as the run goes**, not only at the start, and dropping
+below `--min-free-mib` stops the run cleanly with everything so far recorded
+and resumable. A long run can fill a disk that was comfortable when it began,
+and `DESIGN.md` records that root was already 96% full.
+
+**A win that does not replay stops the whole run.** The solver returns that as
+an error rather than a verdict, and it is the one failure that must never reach
+a results file and be summarised into a number.
+
+**Rows land in completion order, not seed order.** Ordering them would mean
+holding results back, which is the opposite of the point. Anything that cares
+sorts, and the analysis script already does.
+
+**Rejected:** a checkpoint or manifest file alongside the results, which is a
+second source of truth that can disagree with the first. Also rejected:
+`--force` escapes on the two guards. Both guards fire on conditions that have
+already killed a run here, and both name the knob to turn in the refusal.
