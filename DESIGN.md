@@ -277,8 +277,9 @@ budget-exhausted.
    `DECISIONS.md`.
 8. **Batch runner.** Done 2026-09-15: `gypsy batch`, generic over the `Game`
    trait, bounded concurrency, one record appended per deal as it finishes,
-   `--resume` by seed, and refusals on memory and free space. The batch *runs*
-   are still gated on the section below.
+   `--resume` by seed, refusals on memory and free space, and `--both-arms` to
+   solve each deal in both rulesets with each arm's proof carried to the other.
+   The batch *runs* are still gated on the section below.
 9. Batch runs. Worry-back enabled. Analysis + writeup.
 10. WASM front end, last.
 
@@ -334,14 +335,15 @@ denies, so the next rule has to be a different shape of argument rather than a
 repair of this one.
 
 **Also open, and not a dominance:** in *Klondike's* full arm the wins are found
-either almost instantly or at enormous cost — twelve of 29 under 500 nodes, median
-12,696, then a tail to 29.8M, while the eleven unknowns each burn 48M. That is
-the profile of a search committed to the wrong subtree near the root rather
-than one facing a graph slightly too large, and it is consistent with the 0.804
-slope. If it holds up, randomised restarts under a fixed total budget are a
-lever that is not on that curve, and they cost nothing in rigour: a restart
-phase can only turn `unknown` into `solvable`, never claim `unsolvable`. Worth
-testing on the eleven unknown deals for the price of one 48M run.
+either almost instantly or at enormous cost — twelve of 29 under 500 nodes,
+median 12,696, then a tail to 29.8M, while the eleven unknowns each burn 48M.
+That is the profile of a search committed to the wrong subtree near the root
+rather than one facing a graph slightly too large, and it is consistent with
+the 0.804 slope. If it holds up, randomised restarts under a fixed total budget
+are a lever that is not on that curve, and they cost nothing in rigour: a
+restart phase can only turn `unknown` into `solvable`, never claim
+`unsolvable`. Worth testing on the eleven unknown deals for the price of one
+48M run.
 
 After all that: the 1,000-deal Klondike validation the gate below is written
 against, which `gypsy batch` is now built for.

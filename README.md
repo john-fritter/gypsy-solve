@@ -12,8 +12,12 @@ kept under `docs/reports/`.
 core/       rules, state, move generation, seeded deals   (Rust)
 solver/     game trait, search, transposition table       (Rust)
 klondike/   Klondike, for validating the solver           (Rust)
-cli/        deal, list moves, replay, solve               (Rust)
+cli/        deal, list moves, replay, solve, batch        (Rust)
+analysis/   summarising results files                     (Python)
 ```
+
+The Rust/Python boundary is the results files under `docs/results/`. Nothing
+calls across it.
 
 ## Build
 
@@ -32,6 +36,7 @@ gypsy solve  --seed 42 --budget 10000000 --trace line.txt
 gypsy klondike --seed 0 --deals 100 --json
 gypsy klondike --seed 0 --deals 50 --no-worry-back
 gypsy batch  --game klondike --deals 1000 --workers 3 --out results.jsonl
+gypsy batch  --game gypsy --deals 50 --both-arms --out both.jsonl
 ```
 
 `--moves-file -` reads from stdin. In a move file, `#` starts a comment.
@@ -51,9 +56,15 @@ gypsy batch  --game klondike --deals 1000 --workers 3 --out results.jsonl
 and neither is a clock — so a verdict is reproducible on any machine.
 `--max-depth` is a guard against a pathological descent eating memory rather
 than a search parameter: no position is ever re-expanded because of it, and
-hitting it means something is wrong rather than that it needs raising. `--json` prints one
-flat object per deal; `--trace PATH` writes the winning line in a form
-`gypsy replay --moves-file PATH --step` will walk.
+hitting it means something is wrong rather than that it needs raising.
+
+`--json` prints one flat object per deal, naming the game and ruleset that
+produced it; `--trace
+PATH` writes the winning line in a form `gypsy replay --moves-file PATH --step`
+will walk. `gypsy klondike --json` carries the whole line too, because what a
+winning line contains is a measurement in its own right — see
+`analysis/worry_back_usage.py`, which counts how much worry-back wins actually
+use.
 
 The solver applies one dominance, and only in the restricted game: with
 `--no-worry-back` a card that can never be wanted in the tableau again is
@@ -76,6 +87,28 @@ destroy the complete record after it.
 
 `--game klondike --no-worry-back` runs the restricted validation arm; the
 `ruleset` field in each record says which arm produced it.
+
+`--both-arms` solves each deal in *both* rulesets and writes a record for each,
+which is the experiment `DESIGN.md` describes — every deal solved twice — and
+is cheaper than two separate runs, because each arm's proof is carried to the
+other wherever that is sound:
+
+- a restricted `solvable` is a full `solvable`, since the restricted game's
+  moves are a subset, so the line replays in the full game move for move — and
+  it *is* replayed there, not assumed;
+- a full `unsolvable` is a restricted `unsolvable`, since the exhausted larger
+  search covered every position the subset could reach.
+
+Neither carries back. A full win may have used worry-back, and a restricted
+refutation says nothing about a game with more moves in it — that gap is the
+worry-back delta itself. The `verdict_from` field on every record names the arm
+that established the verdict, `search` or the ruleset it came from; a carried
+verdict reports zero nodes because it spent none. Measured on 50 Gypsy deals at
+5M, the carry takes the full arm from 0 resolved to 12.
+
+Both records for a deal are written together, and resume treats a deal as done
+only when every ruleset the run writes is present, so a kill between them costs
+that one deal rather than silently dropping an arm.
 
 It refuses to start when the run would not fit. Each worker holds its own
 transposition table *and* its own search stack, and the stack is not small: at
@@ -100,6 +133,12 @@ Because every `solvable` verdict is replayed before it is returned, the measured
 rate cannot exceed the truth by accident; it can only fall short when deals come
 back `unknown`. So the measured rate is a lower bound, and how close it gets to
 81.945% is the measure of the search rather than of Klondike.
+
+`analysis/klondike_validation.py results.jsonl` turns a run into that bracket.
+It summarises each ruleset in a file separately and never pools them, and it
+refuses any run that does not say `"game":"klondike"` — an unlabelled one
+included. Comparing another game against a Klondike figure would manufacture a
+result, and the dangerous case is that it manufactures a passing one.
 
 `--no-worry-back` runs the same deals with foundation-to-tableau moves
 suppressed. That arm matches no published figure and is not offered as one; it
