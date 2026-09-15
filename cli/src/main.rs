@@ -113,6 +113,13 @@ struct KlondikeArgs {
     max_depth: u32,
     #[arg(long, default_value_t = 256)]
     table_mib: usize,
+    /// Solve the restricted game, with no foundation-to-tableau moves.
+    ///
+    /// The published 81.945% is the worry-back figure, so this arm validates
+    /// against nothing. It exists to exercise dominances that are only
+    /// provable with worry-back off, which never fire in the full game.
+    #[arg(long)]
+    no_worry_back: bool,
     /// One JSON object per deal instead of a human-readable line.
     #[arg(long)]
     json: bool,
@@ -180,7 +187,11 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
                 max_depth: args.max_depth,
                 table_entries: gypsy_solver::Table::entries_in(args.table_mib << 20),
             };
-            let game = Klondike::new();
+            let game = Klondike::new(if args.no_worry_back {
+                klondike::MoveOptions::NO_WORRY_BACK
+            } else {
+                klondike::MoveOptions::ALL
+            });
 
             for seed in args.seed..args.seed + args.deals {
                 let report = solve(&game, &Position::deal(seed), config)?;
@@ -188,10 +199,12 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
                     writeln!(
                         out,
                         concat!(
-                            r#"{{"game":"klondike","seed":{},"verdict":"{}","limit":"{}","#,
+                            r#"{{"game":"klondike","seed":{},"ruleset":"{}","#,
+                            r#""verdict":"{}","limit":"{}","#,
                             r#""nodes":{},"line_length":{},"elapsed_ms":{}}}"#
                         ),
                         seed,
+                        ruleset_name(args.no_worry_back),
                         verdict_name(report.verdict),
                         limit_name(report.limit),
                         report.nodes,
@@ -201,7 +214,8 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
                 } else {
                     writeln!(
                         out,
-                        "seed {seed:6}  {:11}  nodes {:9}  {:6.2}s",
+                        "seed {seed:6}  {:13}  {:11}  nodes {:9}  {:6.2}s",
+                        ruleset_name(args.no_worry_back),
                         verdict_name(report.verdict),
                         report.nodes,
                         report.elapsed.as_secs_f64()

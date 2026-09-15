@@ -19,6 +19,11 @@ Validation passes when the published figure lands inside it. It fails, and
 means the solver is wrong rather than slow, when the figure falls outside —
 a small sample gives a wide bracket and cannot fail this test by accident.
 
+A restricted run (`--no-worry-back`) is summarised the same way but the
+comparison is withheld: the published figure is the worry-back variant, so a
+restricted run neither passes nor fails this test. It is measuring a different
+game and would fail a comparison it was never making.
+
 Usage: python3 analysis/klondike_validation.py results.jsonl
 """
 
@@ -52,6 +57,12 @@ def main(path):
     if not rows:
         sys.exit(f"no results in {path}")
 
+    # Older files predate the field; those runs are all the full variant.
+    rulesets = {row.get("ruleset", "full") for row in rows}
+    if len(rulesets) > 1:
+        sys.exit(f"{path} mixes rulesets {sorted(rulesets)}; split it before summarising")
+    ruleset = rulesets.pop()
+
     counts = Counter(row["verdict"] for row in rows)
     n = len(rows)
     solvable = counts["solvable"]
@@ -61,6 +72,7 @@ def main(path):
     low = solvable / n
     high = 1 - unsolvable / n
 
+    print(f"ruleset          {ruleset}")
     print(f"deals            {n}")
     print(f"  solvable       {solvable:5}  {100 * solvable / n:5.1f}%   (each replayed to a win)")
     print(f"  unsolvable     {unsolvable:5}  {100 * unsolvable / n:5.1f}%   (each an exhaustive refutation)")
@@ -80,6 +92,15 @@ def main(path):
     print(f"allowing for sampling error, 95%:      {100 * floor:.1f}% to {100 * ceiling:.1f}%")
 
     print()
+    if ruleset != "full":
+        print(f"published  {100 * PUBLISHED:.3f}% +/- {100 * PUBLISHED_INTERVAL:.3f}%  "
+              f"(the worry-back variant)")
+        print("NOT COMPARED: this run suppressed worry-back, so it is a different game.")
+        print("The restricted arm validates against no published figure. It exists to")
+        print("exercise a dominance the published variant cannot reach; what it checks")
+        print("is agreement with the same run made without that dominance.")
+        return
+
     print(f"published  {100 * PUBLISHED:.3f}% +/- {100 * PUBLISHED_INTERVAL:.3f}%")
     if floor <= PUBLISHED <= ceiling:
         print(f"CONSISTENT: the published figure is inside the bracket "

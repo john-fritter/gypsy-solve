@@ -1097,3 +1097,108 @@ percent. Giving Klondike a no-worry-back mode would restore the teeth and is
 the obvious follow-up; it is not folded in here because it needs the rule
 implemented a second time, for one deck and four foundations, and that is its
 own PR with its own proof.
+
+## 2026-09-15 — Klondike gets a no-worry-back mode, and its own safe autoplay
+
+**Status:** firm
+
+Klondike here is the published worry-back variant, so a dominance gated on
+worry-back being *off* never fires in it and the validation set could not check
+it. Safe autoplay is that shape of dominance, and it is the only live cut this
+project has. `klondike/` now takes a `MoveOptions` the way `gypsy_core` does,
+and the restricted arm has the single-deck safe autoplay implemented against
+it.
+
+**Two implementations, on purpose.** The Gypsy rule checks four foundation
+piles because two decks give each suit two of them; the Klondike rule checks
+two. Neither is correct for the other game, and a shared one would be a
+parameterised rule whose proof is two proofs. `MoveOptions` is likewise
+mirrored rather than shared: `gypsy_core::MoveOptions` belongs to the one
+implementation of the *Gypsy* rules, and the two games agreeing on a boolean
+today is not a reason to couple their rulesets.
+
+**The rule.** A tableau card of rank *r* and colour *C* is useful in the
+tableau only as a base for a card of rank *r-1* and the opposite colour — two
+suits, one pile each, and both must have passed *r-1*. Aces and twos are
+always safe: nothing stacks on an ace, and the only card that stacks on a two
+is an ace, which never needs a base, because an ace off the foundations means
+its suit's foundation is empty and will take it at any time. That last step is
+simpler than the Gypsy one, where two slots per suit have to be argued about.
+
+**The proof** is the Gypsy reordering argument transplanted: given a winning
+line `L` and the safe card `X` on top of pile `p`, play `X` up first and follow
+`L` with that play removed. Nothing in `L` can land on `X`, because the only
+cards that could are the two opposite-colour *r-1* cards, both on foundations
+and, with worry-back off, unable to leave. A run carrying `X` carries `X` plus
+cards below it — a run is a suffix — so dropping `X` leaves the bottom card and
+the destination test unchanged. Turning up `p`'s next card earlier only adds
+options.
+
+**The waste is excluded, and that is the Klondike-specific finding.** The same
+reordering is unsound for a safe card on top of the waste. Playing it up
+removes it from the talon, which shifts every card behind it down one index and
+moves `turned` back, so every later `Draw` turns a different group of three.
+The reordered line is then playing a different sequence and its draws no longer
+expose the cards its later moves need — the step that carries the pile case,
+"the rest of `L` is still legal", fails outright. The behaviour was already
+pinned by `playing_the_waste_reshapes_the_later_triples`, written for the deal
+rules and now load-bearing for a proof. `WasteToFoundation` stays an ordinary
+action among the alternatives. Gypsy has no waste and no such case, so nothing
+in the Gypsy rule needed revisiting.
+
+**Measured**, 50 Klondike deals, worry-back off, 3M budget, table 256 MiB. Raw
+results in `docs/results/klondike-nwb-3M-50deals-{baseline,autoplay}.jsonl`.
+
+| | Solvable | Unsolvable | Unknown |
+|---|---|---|---|
+| without | 26 | 9 | 15 |
+| with | 26 | **10** | 14 |
+
+No verdict contradicted, none regressed to `unknown`, and every one of the 26
+solvable deals came back with an identical line length. Seed 13 went from
+`unknown` to a proof of unsolvable. On the 35 deals decided in both arms, nodes
+fell **22.5%** — seed 17 by 82.4%, seed 38 by 44.0%, and 11 of the 35 not at
+all, which is the same pattern as Gypsy: foundation plays are already first in
+the ordering, so forcing them changes nothing until something backtracks.
+
+**This is the check the Gypsy set could not give.** The failure mode that
+matters is a dominance discarding a winning line and turning a solvable deal
+into a reported `unsolvable`. Detecting it needs deals the search proves
+unsolvable. The Gypsy no-worry-back set has **zero** — 0 of 50 in both arms,
+41 and 38 unknown — so it could not have caught that error at all; all it
+established was that the 9 wins it found were still found. The Klondike
+restricted set has 9 and 10, alongside 35 of 50 decided in both arms against
+Gypsy's 9. That is the teeth `DESIGN.md` asked for.
+
+**The published arm is untouched, and checked rather than assumed.** Threading
+`MoveOptions` through `Position::legal_actions` changed the signature every
+caller uses, so the full variant was re-run at 3M over the same 50 deals and
+compared with `docs/results/klondike-probe-3M-50deals.jsonl`: identical
+verdicts, node counts and line lengths on all 50. The 81.945% bracket is
+unmoved because nothing about that arm moved.
+
+**The restricted arm validates against no published figure**, and is not
+offered as one. Solvitaire's number is the worry-back variant. What the
+restricted arm is for is exercising a rule the full game cannot reach. Worth
+noting in passing that it resolves *more* at the same budget — 36 of 50 against
+the full arm's 33 — despite having strictly fewer moves, because the smaller
+branching factor finds the wins that are there. Both remain lower bounds.
+
+**The analysis script refuses the comparison rather than making it.** Every
+Klondike record now carries a `ruleset` field, and
+`analysis/klondike_validation.py` prints the restricted arm's bracket but
+withholds the 81.945% verdict, because that figure is the worry-back variant
+and a restricted run is a different game. Files without the field predate it
+and are the full variant. The alternative — letting it compare anyway — would
+manufacture an INCONSISTENT result and, worse, could manufacture a CONSISTENT
+one while the brackets stay this wide.
+
+**Baseline measurement method.** The comparison arm was a copy of this tree
+with the autoplay branch in `Klondike::legal_actions` deleted, built and run
+separately; no toggle for it exists in the shipped binary, and none should,
+because a dominance that can be switched off at runtime is a dominance nobody
+has committed to.
+
+**What this does not do.** Nothing for the full game. The headline figure is
+the worry-back one and it still has no dominance at all. This closes the
+validation hole; it does not move the number.

@@ -1,39 +1,133 @@
-//! Klondike as the search sees it.
+//! Klondike as the search sees it: move ordering, the one dominance, and the
+//! [`Game`] implementation that ties them to the rules.
 
+use gypsy_core::{Card, Suit};
 use gypsy_solver::Game;
 
-use crate::rules::{Action, Position};
+use crate::rules::{Action, MoveOptions, Position};
 use crate::zobrist::Zobrist;
 
-/// Klondike under the Solvitaire variant: draw three, redeals without limit,
-/// worry-back permitted.
+/// Klondike under a chosen ruleset.
+///
+/// The variant is Solvitaire's — a 24-card stock drawn three at a time and
+/// redeals without limit — and `options` decides whether the search may worry
+/// back. Only [`MoveOptions::ALL`] validates against the published 81.945%;
+/// the restricted arm exists because a dominance provable only with
+/// worry-back off never fires in the full game, so the full game cannot check
+/// it. See `DECISIONS.md`.
 pub struct Klondike {
     zobrist: Zobrist,
+    options: MoveOptions,
 }
 
 impl Klondike {
-    pub fn new() -> Klondike {
+    pub fn new(options: MoveOptions) -> Klondike {
         Klondike {
             zobrist: Zobrist::new(),
+            options,
         }
     }
 }
 
 impl Default for Klondike {
     fn default() -> Klondike {
-        Klondike::new()
+        Klondike::new(MoveOptions::ALL)
     }
+}
+
+/// True when no card can ever want to sit on this one again.
+///
+/// A tableau card of rank *r* and colour *C* is useful in the tableau for
+/// exactly one thing: being a base for a card of rank *r-1* and the opposite
+/// colour. One deck, one foundation per suit, so that is **two** piles, and
+/// both must have passed *r-1*. This is the familiar single-deck rule, and it
+/// is deliberately a second implementation rather than a reuse of the Gypsy
+/// one, which checks four piles because two decks give each suit two of them.
+/// Neither is correct for the other game.
+///
+/// Aces and twos are always safe. Nothing stacks on an ace; and the only card
+/// that stacks on a two is an ace, which never needs a base, because an ace
+/// off the foundations means its suit's foundation is empty — one deck, one
+/// ace per suit — and so will take it at any time.
+fn never_wanted_in_the_tableau(position: &Position, card: Card) -> bool {
+    if card.rank() <= 2 {
+        return true;
+    }
+    let wanted = card.rank() - 1;
+    Suit::ALL
+        .iter()
+        .filter(|suit| suit.is_red() != card.is_red())
+        .all(|suit| position.foundations[suit.index() as usize] >= wanted)
+}
+
+/// The first safe foundation play from a *pile top*, if there is one.
+///
+/// The waste is excluded on purpose, and it is not caution — see the proof on
+/// [`Klondike::legal_actions`].
+fn safe_autoplay(position: &Position) -> Option<Action> {
+    position.piles.iter().enumerate().find_map(|(from, pile)| {
+        let card = pile.top()?;
+        (position.foundation_accepts(card) && never_wanted_in_the_tableau(position, card))
+            .then_some(Action::PileToFoundation { from: from as u8 })
+    })
 }
 
 impl Game for Klondike {
     type Position = Position;
     type Action = Action;
 
-    /// Rules-legal actions, reordered. Nothing is dropped — the same rule as
-    /// the Gypsy side, and for the same reason: a wrong dominance here would
-    /// corrupt the validation that is supposed to catch wrong dominances.
+    /// Rules-legal actions, reordered, with safe autoplay applied in the game
+    /// where it is provable.
+    ///
+    /// # Safe autoplay
+    ///
+    /// When a pile's top card is safe by [`never_wanted_in_the_tableau`] the
+    /// search plays it and considers nothing else at this position.
+    ///
+    /// **The argument, with worry-back off.** Let `L` win from this position
+    /// and let `X` be the safe card, on top of pile `p`. Winning puts every
+    /// card up, so `L` plays `X` up at some point. Build `L'`: play `X` up
+    /// first, then follow `L` with that one play removed. Every move of `L'`
+    /// is legal. No move of `L` puts a card on `X`, because the only cards
+    /// that could are the two opposite-colour cards of rank *r-1*, both
+    /// already on foundations and — this is the whole gate — unable to leave
+    /// them with worry-back off. A move of `L` carrying a run that includes
+    /// `X` carries `X` plus cards below it, because a run is a suffix and `X`
+    /// is on top; drop `X` from it and the move still works, since the
+    /// destination only tests the run's bottom card. A move carrying `X` alone
+    /// is the removed play. In the window between, `p` is empty or shorter in
+    /// `L'` than in `L`, and nothing `L` does needs it otherwise: placing onto
+    /// `p` in that window would mean placing onto `X`, which is impossible.
+    /// Turning up `p`'s next card earlier only adds options. So `L'` wins, and
+    /// restricting this position to that one move cannot lose a win.
+    ///
+    /// **Why the waste is excluded.** The same reordering is unsound for a
+    /// safe card on top of the waste, and the failure is specific to Klondike.
+    /// Playing it up removes it from the talon, which shifts every card behind
+    /// it down one index and moves `turned` back — so every later `Draw` turns
+    /// a different group of three — the rules test
+    /// `playing_the_waste_reshapes_the_later_triples` pins exactly that. `L'`
+    /// is then playing a different sequence, and its `Draw`s no longer expose
+    /// the cards its later moves need, so the step that carries the pile case,
+    /// "the rest of `L` is still legal", simply fails. `WasteToFoundation`
+    /// therefore stays an ordinary action among the alternatives. Gypsy has no
+    /// waste and no such case.
+    ///
+    /// **Why worry-back breaks the rule itself.** The gate is the load-bearing
+    /// step, not caution. With worry-back legal, "on a foundation" stops
+    /// meaning "out of the tableau for good": the two cards the condition
+    /// checks can come back down, and one of them may then want `X` under it.
+    /// The tempting repair — play it up, worry it back if it is ever wanted —
+    /// is circular under a transposition table, and is written up in
+    /// `DECISIONS.md` so nobody re-derives it.
     fn legal_actions(&self, position: &Position) -> Vec<Action> {
-        let mut actions = position.legal_actions();
+        if !self.options.worry_back {
+            if let Some(autoplay) = safe_autoplay(position) {
+                return vec![autoplay];
+            }
+        }
+
+        let mut actions = position.legal_actions(self.options);
         actions.sort_by_key(|action| match *action {
             Action::WasteToFoundation => 0u8,
             Action::PileToFoundation { .. } => 1,
@@ -70,5 +164,109 @@ impl Game for Klondike {
 
     fn key(&self, position: &Position) -> u128 {
         self.zobrist.key(position)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::rules::{FOUNDATIONS, PILES};
+
+    const fn card(suit: Suit, rank: u8) -> Card {
+        Card::new(suit, rank)
+    }
+
+    /// Nothing stacks on an ace, and only an ace stacks on a two.
+    #[test]
+    fn aces_and_twos_never_need_a_base() {
+        let position = Position::deal(3);
+        assert!(never_wanted_in_the_tableau(
+            &position,
+            card(Suit::Hearts, 1)
+        ));
+        assert!(never_wanted_in_the_tableau(
+            &position,
+            card(Suit::Hearts, 2)
+        ));
+        assert!(!never_wanted_in_the_tableau(
+            &position,
+            card(Suit::Hearts, 3)
+        ));
+    }
+
+    /// The single-deck rule checks both opposite-colour piles, and the Gypsy
+    /// rule ported unchanged would check four and never fire here. Spades are
+    /// slot 0, hearts 1, clubs 2, diamonds 3.
+    #[test]
+    fn a_card_is_unsafe_until_both_opposite_piles_pass_it() {
+        let mut position = Position::deal(3);
+        let black_five = card(Suit::Spades, 5);
+
+        position.foundations = [0, 4, 0, 3];
+        assert!(
+            !never_wanted_in_the_tableau(&position, black_five),
+            "diamonds are still short, so the four of diamonds can want this"
+        );
+
+        position.foundations[3] = 4;
+        assert!(never_wanted_in_the_tableau(&position, black_five));
+    }
+
+    /// A position whose pile 0 top card is both playable and safe: a six with
+    /// every opposite-colour five already up.
+    fn with_a_safe_autoplay() -> Position {
+        let six = [card(Suit::Spades, 6)];
+        let king = [card(Suit::Spades, 13)];
+        let mut piles: [(usize, &[Card]); PILES] = [(0, &[]); PILES];
+        piles[0] = (0, &six);
+        piles[1] = (0, &king);
+        // Spades to the five, both red suits to the five, clubs untouched.
+        Position::from_parts(piles, [5, 5, 0, 5], &[], 0)
+    }
+
+    #[test]
+    fn a_safe_card_collapses_the_position_to_one_move() {
+        let position = with_a_safe_autoplay();
+        let actions = Klondike::new(MoveOptions::NO_WORRY_BACK).legal_actions(&position);
+        assert_eq!(actions, vec![Action::PileToFoundation { from: 0 }]);
+    }
+
+    /// The gate. With worry-back legal the piles the rule checks can send
+    /// their cards back down, so it proves nothing and every move stays.
+    #[test]
+    fn safe_autoplay_is_suppressed_when_worry_back_is_legal() {
+        let position = with_a_safe_autoplay();
+        let actions = Klondike::new(MoveOptions::ALL).legal_actions(&position);
+        assert!(
+            actions.len() > 1,
+            "the full game keeps its alternatives, got {actions:?}"
+        );
+    }
+
+    /// The Klondike-specific exclusion. A safe card on top of the waste is
+    /// left as one option among many, because playing it up re-aligns every
+    /// later draw and the reordering argument does not survive that.
+    #[test]
+    fn a_safe_card_on_the_waste_does_not_force_anything() {
+        let king = [card(Suit::Spades, 13)];
+        let mut piles: [(usize, &[Card]); PILES] = [(0, &[]); PILES];
+        piles[0] = (0, &king);
+        let waste = [card(Suit::Spades, 6), card(Suit::Hearts, 12)];
+        let position = Position::from_parts(piles, [5, 5, 0, 5], &waste, 1);
+
+        assert_eq!(position.waste_top(), Some(card(Suit::Spades, 6)));
+        let actions = Klondike::new(MoveOptions::NO_WORRY_BACK).legal_actions(&position);
+        assert!(
+            actions.contains(&Action::WasteToFoundation) && actions.len() > 1,
+            "the safe waste card is an option, not a forced move, got {actions:?}"
+        );
+    }
+
+    /// Every foundation index the rule reads is a suit index, which is what
+    /// makes one array entry per suit the right shape. A guard against the
+    /// Gypsy layout, two slots per suit, being carried over.
+    #[test]
+    fn there_is_one_foundation_per_suit() {
+        assert_eq!(FOUNDATIONS, Suit::ALL.len());
     }
 }
