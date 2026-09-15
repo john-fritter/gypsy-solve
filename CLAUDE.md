@@ -68,6 +68,10 @@ structured results Gizmo can summarize without re-running anything.
   No pseudocode, no hand-holding.
 - State every design choice explicitly. Do not leave an undisclosed assumption
   for Gizmo to guess at.
+- **Deliver a Gizmo prompt as a downloadable file**, not as chat text. John
+  uploads it into the Gizmo web UI, so it has to stand alone: no repo context
+  wrapped around it, no "as discussed". Keep a copy in the repo when the
+  question set is worth recording.
 - Gizmo returns findings as markdown. Analysis and interpretation happen with
   John, not inside Gizmo.
 - Gizmo needs repo access on the server (account permissions, checkout, toolchain
