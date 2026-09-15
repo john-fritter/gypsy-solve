@@ -196,7 +196,10 @@ budget-exhausted.
    Implemented in `klondike/`, against the same `Game` trait the Gypsy side
    uses, so the search under test is the search that publishes. The variant is
    the one the published figure was measured on: 24-card stock drawn three at a
-   time, redeals without limit, worry-back permitted.
+   time, redeals without limit, worry-back permitted. A restricted arm was
+   added 2026-09-15 — same variant, worry-back suppressed — which validates
+   against no published figure and exists to exercise dominances the full game
+   cannot reach.
 5. **Fix the search shape**, before any dominance. Done 2026-09-13: the depth
    limit was the cause, not a parameter. The table indexed entries by the depth
    a search had in hand and answered a probe only for a visit with no more to
@@ -234,6 +237,12 @@ budget-exhausted.
       both with and without it. The rule needed correcting for two decks —
       all *four* opposite-colour foundation piles, not two.
 
+      **Validated properly, 2026-09-15.** Klondike now has a no-worry-back
+      mode and the single-deck version of the rule, so the dominance is
+      checked on a set with 9 to 10 proven-unsolvable deals and 35 of 50
+      decided in both arms. No verdict contradicted; 22.5% fewer nodes; one
+      deal newly proved. See the hole below, now closed.
+
       **Still open for the worry-back game, which is the headline figure.**
       The proof needs the opposite-colour cards to be on foundations and
       unable to leave, and worry-back is exactly the rule that lets them
@@ -250,16 +259,22 @@ budget-exhausted.
    that flips a decided verdict is a wrong dominance, and that is exactly the
    failure this project is least able to detect any other way.
 
-   **That harness has a hole, found 2026-09-15.** Klondike here is the
-   published *worry-back* variant, so a dominance gated on worry-back being
+   **That harness had a hole, found and closed 2026-09-15.** Klondike here is
+   the published *worry-back* variant, so a dominance gated on worry-back being
    off — which safe autoplay is, and any correct version of the dead two would
-   have been — never fires in it and is never checked by it. Safe autoplay was
-   checked instead on Gypsy no-worry-back deals, where nine of fifty resolve
-   against Klondike's thirty: far less signal, on the dominance this project
-   is least able to detect an error in. **Giving `klondike/` a no-worry-back
-   mode is the next thing worth doing**, and it needs the safe-autoplay rule
-   implemented a second time for one deck and four foundations, with its own
-   proof.
+   have been — never fired in it and was never checked by it. It was checked
+   instead on Gypsy no-worry-back deals, which resolve nine of fifty and prove
+   **none** unsolvable — and a discarded winning line shows up precisely as a
+   deal wrongly proved unsolvable, so that set could not have caught the error
+   it was standing in for.
+
+   `klondike/` now takes a `MoveOptions` like `gypsy_core` does, and the
+   restricted arm carries the single-deck safe-autoplay rule: two
+   opposite-colour foundations, not Gypsy's four, and the waste excluded as a
+   source because playing a card off it re-aligns every later draw-three and
+   the reordering proof does not survive that. That set resolves 35 of 50 in
+   both arms and proves 9 to 10 unsolvable. Both rules and both proofs are in
+   `DECISIONS.md`.
 8. **Batch runner.** Done 2026-09-15: `gypsy batch`, generic over the `Game`
    trait, bounded concurrency, one record appended per deal as it finishes,
    `--resume` by seed, and refusals on memory and free space. The batch *runs*
@@ -269,18 +284,20 @@ budget-exhausted.
 
 ### Where work resumes
 
-**Close the validation hole: give `klondike/` a no-worry-back mode and
-implement safe autoplay for it.** Safe autoplay is the only dominance the
-project has and the only one on the list that is not dead, and it is currently
-checked on the weakest set available. Until Klondike can exercise it, the cut
-carrying the most weight is the one with the least evidence behind it. The
-Klondike rule is the single-deck one — two opposite-colour foundations, not
-four — so it is a second implementation and needs its own proof.
+**Find a dominance that survives worry-back.** It is the only thing that moves
+the headline figure, and it is now the only dominance work left on the list:
+the two cheap rules are dead, and safe autoplay is done and properly validated.
+Unlike safe autoplay, a worry-back dominance fires in the *published* Klondike
+variant, so the existing validation set checks it with no new harness needed.
 
-After that, in rough order: a dominance that survives worry-back, which is the
-only thing that moves the headline figure; then the 1,000-deal Klondike
-validation the gate below is written against, which `gypsy batch` is now built
-for.
+Nothing on the current list is a candidate. The reordering argument that
+carries safe autoplay needs a card to be out of reach once it is up, which is
+the one thing worry-back denies, so the next rule has to be a different shape
+of argument rather than a repair of this one — or the search needs something
+that is not a dominance at all.
+
+After that: the 1,000-deal Klondike validation the gate below is written
+against, which `gypsy batch` is now built for.
 
 ### Do not run a Gypsy batch yet
 

@@ -86,6 +86,36 @@ impl Pile {
     }
 }
 
+/// Which rules the move generator is asked to honour.
+///
+/// Mirrors `gypsy_core::MoveOptions` rather than sharing it: that type is part
+/// of the one implementation of the *Gypsy* rules, and the two games agreeing
+/// on a boolean today is not a reason to couple their rulesets.
+///
+/// Suppressing worry-back is a restriction of the same game, not a second
+/// ruleset. It matters here for two reasons: the published 81.945% is the
+/// worry-back figure, so only that arm validates against it; and a dominance
+/// that is only provable with worry-back off never fires in the full game, so
+/// without this the Klondike deal set cannot check it at all.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct MoveOptions {
+    /// Generate foundation-to-tableau actions.
+    pub worry_back: bool,
+}
+
+impl MoveOptions {
+    /// The published variant, and the only arm that validates against 81.945%.
+    pub const ALL: MoveOptions = MoveOptions { worry_back: true };
+    /// Worry-back suppressed: the restricted game, and a lower bound on it.
+    pub const NO_WORRY_BACK: MoveOptions = MoveOptions { worry_back: false };
+}
+
+impl Default for MoveOptions {
+    fn default() -> MoveOptions {
+        MoveOptions::ALL
+    }
+}
+
 /// A complete Klondike position.
 ///
 /// The stock and the waste are one list. Cards `[0, turned)` are the waste,
@@ -228,7 +258,7 @@ impl Position {
     }
 
     /// True when the foundations are ready to accept this card.
-    fn foundation_accepts(&self, card: Card) -> bool {
+    pub fn foundation_accepts(&self, card: Card) -> bool {
         self.foundations[card.suit().index() as usize] + 1 == card.rank()
     }
 
@@ -241,8 +271,11 @@ impl Position {
         }
     }
 
-    /// Every action the rules permit. No dominances, as in the Gypsy engine.
-    pub fn legal_actions(&self) -> Vec<Action> {
+    /// Every action the rules permit under `options`. No dominances, as in
+    /// the Gypsy engine: leaving a *rules-legal* action out is a claim about
+    /// the future and belongs behind a proof, in the `Game` implementation.
+    /// `options` is not that — it says which rules are being played.
+    pub fn legal_actions(&self, options: MoveOptions) -> Vec<Action> {
         let mut actions = Vec::new();
 
         if let Some(card) = self.waste_top() {
@@ -276,16 +309,18 @@ impl Position {
             }
         }
 
-        for suit in 0..FOUNDATIONS {
-            let Some(card) = self.foundation_top(suit as u8) else {
-                continue;
-            };
-            for to in 0..PILES {
-                if self.accepts(to, card) {
-                    actions.push(Action::FoundationToPile {
-                        foundation: suit as u8,
-                        to: to as u8,
-                    });
+        if options.worry_back {
+            for suit in 0..FOUNDATIONS {
+                let Some(card) = self.foundation_top(suit as u8) else {
+                    continue;
+                };
+                for to in 0..PILES {
+                    if self.accepts(to, card) {
+                        actions.push(Action::FoundationToPile {
+                            foundation: suit as u8,
+                            to: to as u8,
+                        });
+                    }
                 }
             }
         }
@@ -549,7 +584,7 @@ mod tests {
 
         assert_eq!(state.waste_top(), Some(king));
         assert!(state
-            .legal_actions()
+            .legal_actions(MoveOptions::ALL)
             .contains(&Action::WasteToPile { to: 0 }));
         state
             .apply(Action::WasteToPile { to: 0 })
@@ -558,13 +593,13 @@ mod tests {
         assert_eq!(state.waste_top(), Some(queen));
         assert!(
             !state
-                .legal_actions()
+                .legal_actions(MoveOptions::ALL)
                 .contains(&Action::WasteToPile { to: 1 }),
             "a queen may not start an empty pile"
         );
         // But it may go on the king, which is one rank up and the other colour.
         assert!(state
-            .legal_actions()
+            .legal_actions(MoveOptions::ALL)
             .contains(&Action::WasteToPile { to: 0 }));
     }
 
@@ -623,10 +658,61 @@ mod tests {
             foundation: Suit::Hearts.index(),
             to: 0,
         };
-        assert!(state.legal_actions().contains(&worry));
+        assert!(state.legal_actions(MoveOptions::ALL).contains(&worry));
         state.apply(worry).expect("worry-back is legal here");
         assert_eq!(state.piles[0].top(), Some(queen));
         assert_eq!(state.foundations[Suit::Hearts.index() as usize], 11);
+    }
+
+    /// The restricted game drops exactly the worry-back actions and nothing
+    /// else. `apply` is deliberately not gated: it stays a rules checker, and
+    /// the search only ever applies what generation offered.
+    #[test]
+    fn no_worry_back_suppresses_only_the_foundation_to_pile_actions() {
+        let is_worry = |action: &Action| matches!(action, Action::FoundationToPile { .. });
+
+        // A position that certainly offers one: a black king to receive the
+        // red queen sitting on top of the hearts foundation.
+        let mut foundations = [0; FOUNDATIONS];
+        foundations[Suit::Hearts.index() as usize] = 12;
+        let built = position(
+            [
+                (0, &[card(Suit::Spades, 13)]),
+                (0, &[]),
+                (0, &[]),
+                (0, &[]),
+                (0, &[]),
+                (0, &[]),
+                (0, &[]),
+            ],
+            foundations,
+            &[],
+            0,
+        );
+        assert!(built.legal_actions(MoveOptions::ALL).iter().any(is_worry));
+        assert!(built
+            .legal_actions(MoveOptions::NO_WORRY_BACK)
+            .iter()
+            .all(|action| !is_worry(action)));
+
+        // And nothing but those goes missing, over a real deal's first moves.
+        let mut state = Position::deal(21);
+        for _ in 0..40 {
+            let full = state.legal_actions(MoveOptions::ALL);
+            let kept: Vec<Action> = full
+                .iter()
+                .copied()
+                .filter(|action| !is_worry(action))
+                .collect();
+            assert_eq!(
+                kept,
+                state.legal_actions(MoveOptions::NO_WORRY_BACK),
+                "the gate dropped something that was not a worry-back"
+            );
+
+            let Some(&first) = full.first() else { break };
+            state.apply(first).expect("generated actions are legal");
+        }
     }
 
     #[test]
@@ -654,7 +740,7 @@ mod tests {
         );
 
         assert_eq!(state.piles[0].movable_run(), 3);
-        let actions = state.legal_actions();
+        let actions = state.legal_actions(MoveOptions::ALL);
         assert!(actions.contains(&Action::PileToPile {
             from: 0,
             to: 1,
@@ -699,7 +785,7 @@ mod tests {
     fn generated_actions_are_legal_and_unique() {
         let mut state = Position::deal(21);
         for _ in 0..40 {
-            let actions = state.legal_actions();
+            let actions = state.legal_actions(MoveOptions::ALL);
             let mut seen = actions.clone();
             seen.sort_unstable();
             seen.dedup();
@@ -719,7 +805,7 @@ mod tests {
         for seed in 0..20 {
             let mut state = Position::deal(seed);
             for _ in 0..300 {
-                let actions = state.legal_actions();
+                let actions = state.legal_actions(MoveOptions::ALL);
                 if actions.is_empty() {
                     break;
                 }

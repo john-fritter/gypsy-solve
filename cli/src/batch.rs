@@ -71,7 +71,10 @@ pub struct BatchArgs {
     #[arg(long)]
     resume: bool,
     /// Solve the restricted game, with no foundation-to-tableau moves.
-    /// Gypsy only.
+    ///
+    /// Applies to both games. For Klondike it does not validate against the
+    /// published figure, which is the worry-back one; it is the deal set that
+    /// exercises a dominance only provable with worry-back off.
     #[arg(long)]
     no_worry_back: bool,
     /// Record the winning line in full, not just its length.
@@ -216,9 +219,6 @@ pub fn run(args: BatchArgs) -> Result<(), Box<dyn std::error::Error>> {
     if args.workers == 0 {
         return Err("--workers must be at least one".into());
     }
-    if args.no_worry_back && args.game == BatchGame::Klondike {
-        return Err("--no-worry-back applies to Gypsy; Klondike is the published variant".into());
-    }
 
     // Refuse rather than be killed hours in. Three workers at four GiB of
     // table each is what the kernel took out on 2026-09-15.
@@ -291,34 +291,40 @@ pub fn run(args: BatchArgs) -> Result<(), Box<dyn std::error::Error>> {
             .open(&args.out)?,
     ));
 
+    // Both games take the same restriction, and it means the same thing in
+    // both: foundation-to-tableau moves are not generated. Only Klondike's
+    // full arm validates against the published 81.945%, but the restricted
+    // arm is the only deal set that exercises a worry-back-off dominance.
+    let ruleset = if args.no_worry_back {
+        "no-worry-back"
+    } else {
+        "full"
+    };
+
     match args.game {
-        BatchGame::Gypsy => {
-            let options = if args.no_worry_back {
+        BatchGame::Gypsy => drive(
+            &Gypsy::new(if args.no_worry_back {
                 MoveOptions::NO_WORRY_BACK
             } else {
                 MoveOptions::ALL
-            };
-            let ruleset = if args.no_worry_back {
-                "no-worry-back"
-            } else {
-                "full"
-            };
-            drive(
-                &Gypsy::new(options),
-                State::deal,
-                "gypsy",
-                ruleset,
-                &todo,
-                config,
-                &args,
-                &sink,
-            )
-        }
+            }),
+            State::deal,
+            "gypsy",
+            ruleset,
+            &todo,
+            config,
+            &args,
+            &sink,
+        ),
         BatchGame::Klondike => drive(
-            &Klondike::new(),
+            &Klondike::new(if args.no_worry_back {
+                klondike::MoveOptions::NO_WORRY_BACK
+            } else {
+                klondike::MoveOptions::ALL
+            }),
             Position::deal,
             "klondike",
-            "full",
+            ruleset,
             &todo,
             config,
             &args,

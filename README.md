@@ -30,6 +30,7 @@ gypsy moves  --seed 42 --moves "T7>F2"
 gypsy replay --seed 42 --moves-file line.txt --step
 gypsy solve  --seed 42 --budget 10000000 --trace line.txt
 gypsy klondike --seed 0 --deals 100 --json
+gypsy klondike --seed 0 --deals 50 --no-worry-back
 gypsy batch  --game klondike --deals 1000 --workers 3 --out results.jsonl
 ```
 
@@ -58,8 +59,11 @@ The solver applies one dominance, and only in the restricted game: with
 `--no-worry-back` a card that can never be wanted in the tableau again is
 played up and nothing else is considered at that position. It is gated because
 the proof is — worry-back lets the cards the rule checks come back down, and
-then the rule proves nothing. The full game has no dominance at all, and on a
-real Gypsy deal it mostly returns `unknown`.
+then the rule proves nothing. Both games have the rule, with a proof each:
+Gypsy checks four opposite-colour foundation piles because two decks give each
+suit two, Klondike checks two, and Klondike additionally excludes the waste,
+because playing a card off it re-aligns every later draw-three. The full game
+has no dominance at all, and on a real Gypsy deal it mostly returns `unknown`.
 
 ## Batch runs
 
@@ -69,6 +73,9 @@ keeps everything it had already proved, and `--resume` skips what is already
 recorded — the answer to a kill is to run the same command again. A record left
 torn by a kill is dropped on resume rather than appended to, which would
 destroy the complete record after it.
+
+`--game klondike --no-worry-back` runs the restricted validation arm; the
+`ruleset` field in each record says which arm produced it.
 
 It refuses to start when the run would not fit. Each worker holds its own
 transposition table *and* its own search stack, and the stack is not small: at
@@ -93,6 +100,13 @@ Because every `solvable` verdict is replayed before it is returned, the measured
 rate cannot exceed the truth by accident; it can only fall short when deals come
 back `unknown`. So the measured rate is a lower bound, and how close it gets to
 81.945% is the measure of the search rather than of Klondike.
+
+`--no-worry-back` runs the same deals with foundation-to-tableau moves
+suppressed. That arm matches no published figure and is not offered as one; it
+exists because a dominance provable only with worry-back off never fires in the
+published variant, so that variant cannot check it. It is where the
+safe-autoplay rule is tested, and it is the only set here that proves deals
+unsolvable in numbers — which is the direction a wrong dominance fails in.
 
 ## Move notation
 

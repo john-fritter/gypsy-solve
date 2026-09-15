@@ -17,8 +17,8 @@ mod zobrist;
 
 pub use game::Klondike;
 pub use rules::{
-    Action, ParseActionError, Pile, Position, DEALT_TO_TABLEAU, DECK_SIZE, DRAW, FOUNDATIONS,
-    PILES, STOCK_AT_DEAL,
+    Action, MoveOptions, ParseActionError, Pile, Position, DEALT_TO_TABLEAU, DECK_SIZE, DRAW,
+    FOUNDATIONS, PILES, STOCK_AT_DEAL,
 };
 
 #[cfg(test)]
