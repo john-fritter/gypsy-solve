@@ -868,3 +868,93 @@ the design document, both wrong. Had either gone in ungated it would have
 pruned winning lines, and the only symptom would have been a Gypsy winnability
 figure that came out slightly too low — with no test failing and nothing to
 notice.
+
+---
+
+## 2026-09-15 — The table probes; unconditional replacement was thrashing
+
+**Status:** firm. Amends *The table is a set of expanded positions, with no
+depth* (2026-09-13), which stands except for one sentence.
+
+That entry said eviction "costs a re-expansion and nothing else". It does not.
+Two keys that share a slot evict each other, and when both sit on a path the
+search walks often they do it indefinitely: every eviction causes a
+re-expansion, and every re-expansion causes the reverse eviction. The table is
+now open-addressed, probing eight slots forward from the home slot, so the
+second key gets a place of its own.
+
+**How it was found.** Not by looking for it. A Gypsy run reported
+`table_filled` of 265,363 after expanding two million positions, against
+1.9 million for the deal beside it. Expansion only happens on a table miss, so
+the gap could not be explained by anything benign.
+
+**Measured before the fix**, 3M node budget, instrumented:
+
+| Deal | distinct positions found | re-expansions |
+|---|---|---|
+| Gypsy 2 | 266,385, then flat | 2,733,615 — 91% of the budget |
+| Klondike 3 | 2,046,484 | 953,516 — 32% |
+| Klondike 1 | 2,966,919 | 33,081 — 1% |
+
+Gypsy deal 2 is the shape of the bug: it stopped finding new positions after
+about 266,000 of them and spent the rest of its budget walking the same region,
+then reported `unknown` for want of a budget it was mostly wasting. Whether a
+deal suffered was luck — which keys collided, and whether they sat anywhere hot.
+
+The hash was never at fault. Those 266,385 keys collide 1,022 times in
+33.5 million slots, against a birthday expectation of about 1,057. It was the
+replacement policy alone.
+
+**After the fix** the same two deals re-expand 0 and 7 positions out of three
+million.
+
+**The scoreboard**, 50 Klondike deals, table entries at ~4x the budget as
+before. Raw results in `docs/results/klondike-probe-*.jsonl`.
+
+| Budget | Direct-mapped | Probing |
+|---|---|---|
+| 3M | 21 / 9 / 20 unknown (40%) | 24 / 9 / **17** (34%) |
+| 12M | 23 / 10 / 17 (34%) | 26 / 10 / **14** (28%) |
+| 48M | 27 / 10 / 13 (26%) | 29 / 10 / **11** (22%) |
+
+No verdict was contradicted at any level and none regressed to `unknown`.
+Every deal that moved moved from `unknown` to decided, and all seven that
+moved were wins — consistent with a search that was missing wins because it
+never got deep enough, which is what the thrashing did.
+
+**Keep it in proportion.** Three deals at every level, worth about one
+fourfold budget step, and the slope is unchanged: the unknown bucket still
+falls by 0.804 per 4x step against 0.806 before. The curve moved down, not
+round. Reaching the 5% gate from 11 unknown still needs about 6.8 further
+fourfold steps, roughly 10^4 times the budget. This was a real bug and fixing
+it was necessary; it is not a route to the gate.
+
+**A subtlety worth the line it cost.** When the whole probe window belongs to
+other keys the new key must be displaced *inside* the window. The first
+version wrote it one slot past, where `contains` never looks, so every
+displaced key was re-expanded on every visit — which made Klondike deal 1
+thirty times worse than the bug being fixed. `a_displaced_key_is_still_found`
+pins it.
+
+**Consequence for the batch runner, and it contradicts `DESIGN.md`.** Peak
+resident memory is no longer approximately the table size. The search now
+descends instead of thrashing, so far more frames stay live:
+
+| Run | Table | Peak RSS | Over table |
+|---|---|---|---|
+| Klondike 3, 3M | 256 MiB | 362 MiB | 107 MiB |
+| Klondike 3, 12M | 1024 MiB | 1437 MiB | 413 MiB |
+
+The excess is bounded by `max_depth` — 100,000 frames at roughly 4 KiB each,
+so it saturates near 400 MiB — but it is not negligible, and it killed the
+first 48M run outright: three workers at 4 GiB of table each went over the box
+and the kernel took them. `DESIGN.md` sizes fritter.lol at four workers with
+about 4.9 GiB available, which now means four times a table *plus* up to four
+times a stack. Workers must be sized as `table + stack allowance`, and
+`max_depth` is a memory knob as well as the stack guard the 2026-09-13 entry
+called it.
+
+**Rejected:** a larger table. It does not touch the mechanism — the colliding
+pairs are as likely at any size, and Gypsy deal 2 was thrashing in a table 1%
+full. Also rejected: N-way set association, which would work, for being more
+machinery than probing needs at these load factors.
