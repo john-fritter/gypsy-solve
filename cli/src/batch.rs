@@ -27,10 +27,13 @@ use std::os::unix::fs::FileExt;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Mutex;
+use std::time::Duration;
 
 use clap::{Args, ValueEnum};
 use gypsy_core::{MoveOptions, State};
-use gypsy_solver::{solve, Config, Game, Gypsy, Limit, Table, Verdict};
+use gypsy_solver::{
+    replay, solve, Config, Game, Gypsy, Limit, Report, Table, UnverifiedSolution, Verdict,
+};
 use klondike::{Klondike, Position};
 
 #[derive(Copy, Clone, PartialEq, Eq, ValueEnum)]
@@ -75,8 +78,17 @@ pub struct BatchArgs {
     /// Applies to both games. For Klondike it does not validate against the
     /// published figure, which is the worry-back one; it is the deal set that
     /// exercises a dominance only provable with worry-back off.
-    #[arg(long)]
+    #[arg(long, conflicts_with = "both_arms")]
     no_worry_back: bool,
+    /// Solve each deal in both rulesets, carrying each arm's proof to the
+    /// other wherever that is sound. Two records per deal.
+    ///
+    /// This is the shape of the experiment `DESIGN.md` describes — every deal
+    /// solved twice, worry-back off and then on — and solving them together is
+    /// what makes the carry possible. It is strictly cheaper than two separate
+    /// runs and never weaker: see `solve_both`.
+    #[arg(long)]
+    both_arms: bool,
     /// Record the winning line in full, not just its length.
     #[arg(long)]
     lines: bool,
@@ -124,28 +136,43 @@ fn free_disk_mib(path: &Path) -> io::Result<u64> {
     Ok(stat.f_bavail.saturating_mul(stat.f_frsize) >> 20)
 }
 
-/// Seeds already recorded, so a resumed run does not redo them.
+/// Seeds already recorded for every ruleset in `wanted`, so a resumed run does
+/// not redo them.
 ///
 /// Scanned textually rather than parsed: a run killed mid-write can leave a
 /// torn final line, and a torn line should cost its one deal rather than the
 /// whole file.
-fn recorded_seeds(path: &Path) -> io::Result<HashSet<u64>> {
+///
+/// `wanted` is what makes `--both-arms` safe to resume. That mode writes two
+/// records per deal, and a kill between them leaves a seed with one. Counting
+/// such a seed as done would drop an arm silently, so a seed is done only when
+/// every ruleset asked for is present.
+fn recorded_seeds(path: &Path, wanted: &[&str]) -> io::Result<HashSet<u64>> {
     let file = match File::open(path) {
         Ok(file) => file,
         Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(HashSet::new()),
         Err(error) => return Err(error),
     };
-    let mut seeds = HashSet::new();
+    let mut seen: std::collections::HashMap<u64, Vec<String>> = std::collections::HashMap::new();
     for line in BufReader::new(file).lines() {
         let line = line?;
         if !line.trim_end().ends_with('}') {
             continue;
         }
         if let Some(seed) = seed_of(&line) {
-            seeds.insert(seed);
+            let ruleset = field_of(&line, "ruleset").unwrap_or_else(|| "full".to_string());
+            seen.entry(seed).or_default().push(ruleset);
         }
     }
-    Ok(seeds)
+    Ok(seen
+        .into_iter()
+        .filter(|(_, rulesets)| {
+            wanted
+                .iter()
+                .all(|want| rulesets.iter().any(|have| have == want))
+        })
+        .map(|(seed, _)| seed)
+        .collect())
 }
 
 /// Drops a trailing partial record, returning how many bytes went.
@@ -190,10 +217,74 @@ fn trim_partial_record(path: &Path) -> io::Result<u64> {
     Ok(length)
 }
 
+/// Drops a trailing deal that is recorded for only some of `wanted`.
+///
+/// Both arms of a deal go down in one write, so the file is a sequence of
+/// whole per-deal blocks — except possibly the last, if a kill tore it. Once
+/// `trim_partial_record` has removed the torn bytes, what can be left is a
+/// *complete* record whose partner never made it. Counting that seed as done
+/// would drop an arm silently; leaving it in place would double-count that arm
+/// when the seed is solved again on resume. Either way the results file lies,
+/// so the orphan goes.
+///
+/// Only the tail can be incomplete, which is why this truncates rather than
+/// rewrites. A single-ruleset run can never have an orphan and this is a no-op
+/// for it.
+fn trim_incomplete_tail(path: &Path, wanted: &[&str]) -> io::Result<u64> {
+    if wanted.len() < 2 {
+        return Ok(0);
+    }
+    let text = match std::fs::read_to_string(path) {
+        Ok(text) => text,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(0),
+        Err(error) => return Err(error),
+    };
+
+    let mut offset = 0usize;
+    let mut lines: Vec<(usize, &str)> = Vec::new();
+    for line in text.split_inclusive('\n') {
+        lines.push((offset, line));
+        offset += line.len();
+    }
+
+    let Some(last_seed) = lines.last().and_then(|(_, line)| seed_of(line)) else {
+        return Ok(0);
+    };
+    let first = lines
+        .iter()
+        .rposition(|(_, line)| seed_of(line) != Some(last_seed))
+        .map_or(0, |at| at + 1);
+
+    let present: Vec<String> = lines[first..]
+        .iter()
+        .filter_map(|(_, line)| field_of(line, "ruleset"))
+        .collect();
+    if wanted
+        .iter()
+        .all(|want| present.iter().any(|have| have == want))
+    {
+        return Ok(0);
+    }
+
+    let keep = lines[first].0 as u64;
+    let length = text.len() as u64;
+    OpenOptions::new().write(true).open(path)?.set_len(keep)?;
+    Ok(length - keep)
+}
+
 fn seed_of(line: &str) -> Option<u64> {
     let rest = line.split("\"seed\":").nth(1)?;
     let digits: String = rest.chars().take_while(char::is_ascii_digit).collect();
     digits.parse().ok()
+}
+
+/// A string field out of a record, read the same textual way as `seed_of`.
+///
+/// Records written before a field existed simply do not have it, and the
+/// caller decides what that means rather than this failing.
+fn field_of(line: &str, name: &str) -> Option<String> {
+    let rest = line.split(&format!("\"{name}\":\"")).nth(1)?;
+    Some(rest.chars().take_while(|&c| c != '"').collect())
 }
 
 fn verdict_name(verdict: Verdict) -> &'static str {
@@ -210,6 +301,174 @@ fn limit_name(limit: Option<Limit>) -> &'static str {
         Some(Limit::Depth) => "depth",
         None => "none",
     }
+}
+
+/// One arm's answer for one deal, and where the answer came from.
+struct Answer<A> {
+    report: Report<A>,
+    /// `"search"`, or the ruleset whose proof was carried into this one.
+    from: &'static str,
+}
+
+impl<A> Answer<A> {
+    fn searched(report: Report<A>) -> Answer<A> {
+        Answer {
+            report,
+            from: "search",
+        }
+    }
+
+    /// A verdict established by the other arm. It cost no nodes and used no
+    /// table, and the record says so rather than borrowing the other arm's
+    /// numbers.
+    fn carried(verdict: Verdict, line: Option<Vec<A>>, from: &'static str) -> Answer<A> {
+        Answer {
+            report: Report {
+                verdict,
+                line,
+                nodes: 0,
+                elapsed: Duration::ZERO,
+                table_capacity: 0,
+                table_filled: 0,
+                limit: None,
+            },
+            from,
+        }
+    }
+}
+
+/// The rulesets a run solves: one arm, or both with proofs carried across.
+#[derive(Clone, Copy)]
+enum Arms<'a, G> {
+    One {
+        game: &'a G,
+        /// Exactly one name, from `wanted_rulesets`, so that what a resumed
+        /// run counts as done and what a run writes cannot drift apart.
+        rulesets: &'static [&'static str],
+    },
+    Both {
+        restricted: &'a G,
+        full: &'a G,
+    },
+}
+
+impl<G> Arms<'_, G> {
+    /// The rulesets a record is written for, in the order they are written.
+    fn rulesets(&self) -> &'static [&'static str] {
+        match self {
+            Arms::One { rulesets, .. } => rulesets,
+            Arms::Both { .. } => BOTH_ARMS,
+        }
+    }
+}
+
+/// The two arms, in the order `solve_both` returns them.
+const BOTH_ARMS: &[&str] = &["no-worry-back", "full"];
+
+/// The rulesets this run will write, so a resumed run knows what "done" means.
+fn wanted_rulesets(args: &BatchArgs) -> &'static [&'static str] {
+    if args.both_arms {
+        BOTH_ARMS
+    } else if args.no_worry_back {
+        &["no-worry-back"]
+    } else {
+        &["full"]
+    }
+}
+
+/// Which arms this run solves.
+///
+/// Both games take the same restriction and it means the same thing in both:
+/// foundation-to-tableau moves are not generated. Only Klondike's full arm
+/// validates against the published 81.945%, but the restricted arm is the only
+/// deal set that exercises a worry-back-off dominance.
+fn arms_of<'a, G>(args: &BatchArgs, restricted: &'a G, full: &'a G) -> Arms<'a, G> {
+    if args.both_arms {
+        Arms::Both { restricted, full }
+    } else if args.no_worry_back {
+        Arms::One {
+            game: restricted,
+            rulesets: wanted_rulesets(args),
+        }
+    } else {
+        Arms::One {
+            game: full,
+            rulesets: wanted_rulesets(args),
+        }
+    }
+}
+
+/// Both arms' answers for one deal, restricted first.
+type BothAnswers<G> = (Answer<<G as Game>::Action>, Answer<<G as Game>::Action>);
+
+/// Solves one deal in both arms, carrying each arm's proof to the other
+/// wherever that is sound.
+///
+/// The restricted game generates a subset of the full game's moves and differs
+/// in nothing else, so two implications hold:
+///
+/// - **A restricted win is a full win.** Every move of the line is legal in
+///   the full game, so the line replays there move for move. It *is* replayed
+///   rather than assumed — a carried claim is still a claim, and this project
+///   does not take a claimed win on trust.
+/// - **A full refutation is a restricted refutation.** An exhausted full
+///   search visited every position the restricted game could have reached, so
+///   if there is no win among them there is none among the subset either.
+///
+/// Neither carries the other way, and the asymmetry is the whole point. A full
+/// win may have used worry-back, which the restricted game cannot do. A
+/// restricted refutation says nothing about a game with strictly more moves in
+/// it — that is exactly the worry-back delta this project exists to measure.
+///
+/// Of the two, only the first is expected to pay. Refuting the full game means
+/// exhausting a strictly larger graph, so an arm that can do that at a given
+/// budget can almost always refute the restricted game directly — the second
+/// carry is kept because it is sound and free, not because it is expected to
+/// fire often.
+///
+/// The restricted arm goes first because it is the cheaper one: it has safe
+/// autoplay and a smaller branching factor, so the deals it wins cost the full
+/// arm nothing at all. Measured on 50 Gypsy deals at 5M, that is the
+/// difference between the full arm resolving 0 and resolving 12.
+///
+/// Only one search runs at a time, so a worker still costs one table.
+fn solve_both<G: Game>(
+    restricted: &G,
+    full: &G,
+    start: &G::Position,
+    config: Config,
+) -> Result<BothAnswers<G>, UnverifiedSolution<G::Action>> {
+    let restricted_report = solve(restricted, start, config)?;
+
+    if restricted_report.verdict == Verdict::Solvable {
+        let line = restricted_report
+            .line
+            .clone()
+            .expect("a solvable report carries its line");
+        if let Err(failure) = replay(full, start, &line) {
+            return Err(UnverifiedSolution { line, failure });
+        }
+        return Ok((
+            Answer::searched(restricted_report),
+            Answer::carried(Verdict::Solvable, Some(line), "no-worry-back"),
+        ));
+    }
+
+    let full_report = solve(full, start, config)?;
+
+    // Only an `Unknown` is worth upgrading; a restricted arm that refuted the
+    // deal itself already has the stronger result of its own.
+    if full_report.verdict == Verdict::Unsolvable && restricted_report.verdict == Verdict::Unknown {
+        return Ok((
+            Answer::carried(Verdict::Unsolvable, None, "full"),
+            Answer::searched(full_report),
+        ));
+    }
+
+    Ok((
+        Answer::searched(restricted_report),
+        Answer::searched(full_report),
+    ))
 }
 
 pub fn run(args: BatchArgs) -> Result<(), Box<dyn std::error::Error>> {
@@ -252,7 +511,11 @@ pub fn run(args: BatchArgs) -> Result<(), Box<dyn std::error::Error>> {
         if dropped > 0 {
             eprintln!("batch: dropped {dropped} bytes of a record left torn by an earlier kill");
         }
-        recorded_seeds(&args.out)?
+        let orphaned = trim_incomplete_tail(&args.out, wanted_rulesets(&args))?;
+        if orphaned > 0 {
+            eprintln!("batch: dropped {orphaned} bytes of a deal recorded in only one arm");
+        }
+        recorded_seeds(&args.out, wanted_rulesets(&args))?
     } else {
         if args.out.exists() && args.out.metadata()?.len() > 0 {
             return Err(format!(
@@ -291,49 +554,87 @@ pub fn run(args: BatchArgs) -> Result<(), Box<dyn std::error::Error>> {
             .open(&args.out)?,
     ));
 
-    // Both games take the same restriction, and it means the same thing in
-    // both: foundation-to-tableau moves are not generated. Only Klondike's
-    // full arm validates against the published 81.945%, but the restricted
-    // arm is the only deal set that exercises a worry-back-off dominance.
-    let ruleset = if args.no_worry_back {
-        "no-worry-back"
-    } else {
-        "full"
-    };
-
     match args.game {
-        BatchGame::Gypsy => drive(
-            &Gypsy::new(if args.no_worry_back {
-                MoveOptions::NO_WORRY_BACK
-            } else {
-                MoveOptions::ALL
-            }),
-            State::deal,
-            "gypsy",
-            ruleset,
-            &todo,
-            config,
-            &args,
-            &sink,
-        ),
-        BatchGame::Klondike => drive(
-            &Klondike::new(if args.no_worry_back {
-                klondike::MoveOptions::NO_WORRY_BACK
-            } else {
-                klondike::MoveOptions::ALL
-            }),
-            Position::deal,
-            "klondike",
-            ruleset,
-            &todo,
-            config,
-            &args,
-            &sink,
-        ),
+        BatchGame::Gypsy => {
+            let restricted = Gypsy::new(MoveOptions::NO_WORRY_BACK);
+            let full = Gypsy::new(MoveOptions::ALL);
+            drive(
+                arms_of(&args, &restricted, &full),
+                State::deal,
+                "gypsy",
+                &todo,
+                config,
+                &args,
+                &sink,
+            )
+        }
+        BatchGame::Klondike => {
+            let restricted = Klondike::new(klondike::MoveOptions::NO_WORRY_BACK);
+            let full = Klondike::new(klondike::MoveOptions::ALL);
+            drive(
+                arms_of(&args, &restricted, &full),
+                Position::deal,
+                "klondike",
+                &todo,
+                config,
+                &args,
+                &sink,
+            )
+        }
     }?;
 
     sink.lock().expect("no panic held the sink").flush()?;
     Ok(())
+}
+
+/// One record, carrying the configuration that produced it so a results file
+/// can be summarised without knowing how it was made.
+///
+/// `verdict_from` is the field that keeps `--both-arms` honest: a carried
+/// verdict cost no nodes and searched nothing, and a reader counting work done
+/// or auditing a proof has to be able to tell which arm actually established
+/// it.
+fn record_of<A: Display>(
+    game_name: &str,
+    seed: u64,
+    ruleset: &str,
+    answer: &Answer<A>,
+    config: Config,
+    lines: bool,
+) -> String {
+    let report = &answer.report;
+    let line = match (&report.line, lines) {
+        (Some(line), true) => format!(
+            ",\"line\":\"{}\"",
+            line.iter()
+                .map(|action| action.to_string())
+                .collect::<Vec<_>>()
+                .join(" ")
+        ),
+        _ => String::new(),
+    };
+    format!(
+        concat!(
+            r#"{{"game":"{}","seed":{},"ruleset":"{}","verdict":"{}","verdict_from":"{}","#,
+            r#""limit":"{}","nodes":{},"line_length":{},"elapsed_ms":{},"node_budget":{},"#,
+            r#""max_depth":{},"table_capacity":{},"table_filled":{}{}}}"#,
+            "\n"
+        ),
+        game_name,
+        seed,
+        ruleset,
+        verdict_name(report.verdict),
+        answer.from,
+        limit_name(report.limit),
+        report.nodes,
+        report.line.as_ref().map_or(0, |line| line.len()),
+        report.elapsed.as_millis(),
+        config.node_budget,
+        config.max_depth,
+        report.table_capacity,
+        report.table_filled,
+        line,
+    )
 }
 
 /// Solves every seed in `todo`, appending one record each as it lands.
@@ -342,10 +643,9 @@ pub fn run(args: BatchArgs) -> Result<(), Box<dyn std::error::Error>> {
 /// publishes the Gypsy numbers has to be the runner Klondike validated.
 #[allow(clippy::too_many_arguments)]
 fn drive<G, D>(
-    game: &G,
+    arms: Arms<'_, G>,
     deal: D,
     game_name: &str,
-    ruleset: &str,
     todo: &[u64],
     config: Config,
     args: &BatchArgs,
@@ -370,8 +670,16 @@ where
                 return;
             }
 
-            let report = match solve(game, &deal(seed), config) {
-                Ok(report) => report,
+            let start = deal(seed);
+            let answers = match arms {
+                Arms::One { game, .. } => {
+                    solve(game, &start, config).map(|report| vec![Answer::searched(report)])
+                }
+                Arms::Both { restricted, full } => solve_both(restricted, full, &start, config)
+                    .map(|(restricted, full)| vec![restricted, full]),
+            };
+            let answers = match answers {
+                Ok(answers) => answers,
                 Err(unverified) => {
                     // A win that does not replay is a bug in the solver, and
                     // the one failure that must never be written to a results
@@ -383,37 +691,16 @@ where
                 }
             };
 
-            let line = match (&report.line, args.lines) {
-                (Some(line), true) => format!(
-                    ",\"line\":\"{}\"",
-                    line.iter()
-                        .map(|action| action.to_string())
-                        .collect::<Vec<_>>()
-                        .join(" ")
-                ),
-                _ => String::new(),
-            };
-            let record = format!(
-                concat!(
-                    r#"{{"game":"{}","seed":{},"ruleset":"{}","verdict":"{}","limit":"{}","#,
-                    r#""nodes":{},"line_length":{},"elapsed_ms":{},"node_budget":{},"#,
-                    r#""max_depth":{},"table_capacity":{},"table_filled":{}{}}}"#,
-                    "\n"
-                ),
-                game_name,
-                seed,
-                ruleset,
-                verdict_name(report.verdict),
-                limit_name(report.limit),
-                report.nodes,
-                report.line.as_ref().map_or(0, |line| line.len()),
-                report.elapsed.as_millis(),
-                config.node_budget,
-                config.max_depth,
-                report.table_capacity,
-                report.table_filled,
-                line,
-            );
+            // Both arms of a deal go down in one write, so a resumed run never
+            // sees half a deal. `recorded_seeds` checks for both anyway.
+            let record: String = arms
+                .rulesets()
+                .iter()
+                .zip(&answers)
+                .map(|(ruleset, answer)| {
+                    record_of(game_name, seed, ruleset, answer, config, args.lines)
+                })
+                .collect();
 
             {
                 let mut sink = sink.lock().expect("no panic held the sink");
@@ -430,12 +717,19 @@ where
             }
 
             let done = finished.fetch_add(1, Ordering::Relaxed) + 1;
-            eprintln!(
-                "  {done}/{} seed {seed} {} nodes {}",
-                todo.len(),
-                verdict_name(report.verdict),
-                report.nodes
-            );
+            let told: Vec<String> = arms
+                .rulesets()
+                .iter()
+                .zip(&answers)
+                .map(|(ruleset, answer)| {
+                    let verdict = verdict_name(answer.report.verdict);
+                    match answer.from {
+                        "search" => format!("{ruleset} {verdict} nodes {}", answer.report.nodes),
+                        from => format!("{ruleset} {verdict} carried from {from}"),
+                    }
+                })
+                .collect();
+            eprintln!("  {done}/{} seed {seed} {}", todo.len(), told.join("; "));
 
             // Checked as we go, not only at the start: a long run can fill a
             // disk that was comfortable when it began.
@@ -496,7 +790,10 @@ mod tests {
         let text = std::fs::read_to_string(&path).expect("read");
         assert!(text.ends_with('\n'), "a whole record and nothing after it");
         assert_eq!(text.lines().count(), 1);
-        assert_eq!(recorded_seeds(&path).expect("scan"), HashSet::from([0]));
+        assert_eq!(
+            recorded_seeds(&path, &["full"]).expect("scan"),
+            HashSet::from([0])
+        );
         std::fs::remove_file(&path).ok();
     }
 
@@ -505,8 +802,139 @@ mod tests {
         let path = scratch("whole");
         std::fs::write(&path, "{\"seed\":0}\n{\"seed\":1}\n").expect("write");
         assert_eq!(trim_partial_record(&path).expect("trim"), 0);
-        assert_eq!(recorded_seeds(&path).expect("scan"), HashSet::from([0, 1]));
+        assert_eq!(
+            recorded_seeds(&path, &["full"]).expect("scan"),
+            HashSet::from([0, 1])
+        );
         std::fs::remove_file(&path).ok();
+    }
+
+    /// `--both-arms` writes two records per deal. A kill between them must not
+    /// let a resumed run count the deal as done and drop an arm silently.
+    #[test]
+    fn a_deal_recorded_in_only_one_arm_is_not_done() {
+        let path = scratch("one-arm");
+        std::fs::write(
+            &path,
+            concat!(
+                r#"{"seed":0,"ruleset":"no-worry-back"}"#,
+                "\n",
+                r#"{"seed":1,"ruleset":"no-worry-back"}"#,
+                "\n",
+                r#"{"seed":1,"ruleset":"full"}"#,
+                "\n",
+            ),
+        )
+        .expect("write");
+        assert_eq!(
+            recorded_seeds(&path, BOTH_ARMS).expect("scan"),
+            HashSet::from([1]),
+            "seed 0 has only its restricted arm, so it is not done"
+        );
+        std::fs::remove_file(&path).ok();
+    }
+
+    /// The orphan case: a kill between the two arms of one deal leaves a
+    /// complete record with no partner. Keeping it would double-count that arm
+    /// once the deal is solved again.
+    #[test]
+    fn a_deal_left_in_one_arm_is_dropped_before_resuming() {
+        let path = scratch("orphan");
+        let whole = concat!(
+            r#"{"seed":7,"ruleset":"no-worry-back"}"#,
+            "\n",
+            r#"{"seed":7,"ruleset":"full"}"#,
+            "\n",
+        );
+        std::fs::write(
+            &path,
+            format!("{whole}{}", "{\"seed\":8,\"ruleset\":\"no-worry-back\"}\n"),
+        )
+        .expect("write");
+
+        assert!(trim_incomplete_tail(&path, BOTH_ARMS).expect("trim") > 0);
+        assert_eq!(std::fs::read_to_string(&path).expect("read"), whole);
+        assert_eq!(
+            recorded_seeds(&path, BOTH_ARMS).expect("scan"),
+            HashSet::from([7])
+        );
+        std::fs::remove_file(&path).ok();
+    }
+
+    /// A complete file is left alone, and a single-arm run has no orphans to
+    /// find in the first place.
+    #[test]
+    fn a_complete_tail_survives_the_orphan_check() {
+        let path = scratch("complete");
+        let whole = concat!(
+            r#"{"seed":7,"ruleset":"no-worry-back"}"#,
+            "\n",
+            r#"{"seed":7,"ruleset":"full"}"#,
+            "\n",
+        );
+        std::fs::write(&path, whole).expect("write");
+        assert_eq!(trim_incomplete_tail(&path, BOTH_ARMS).expect("trim"), 0);
+        assert_eq!(trim_incomplete_tail(&path, &["full"]).expect("trim"), 0);
+        assert_eq!(std::fs::read_to_string(&path).expect("read"), whole);
+        std::fs::remove_file(&path).ok();
+    }
+
+    fn cheap() -> Config {
+        Config {
+            node_budget: 200_000,
+            max_depth: 100_000,
+            table_entries: Table::entries_in(16 << 20),
+        }
+    }
+
+    /// The carry that pays. A deal the restricted arm wins is a full-arm win
+    /// for no nodes at all, and the line comes across with it. Seed 21 is the
+    /// cheapest such Gypsy deal on record, at 2,167 nodes.
+    #[test]
+    fn a_restricted_win_is_carried_into_the_full_arm() {
+        let restricted = Gypsy::new(MoveOptions::NO_WORRY_BACK);
+        let full = Gypsy::new(MoveOptions::ALL);
+        let (left, right) = solve_both(&restricted, &full, &State::deal(21), cheap())
+            .expect("the carried line replays in the full game");
+
+        assert_eq!(left.report.verdict, Verdict::Solvable);
+        assert_eq!(left.from, "search");
+        assert_eq!(right.report.verdict, Verdict::Solvable);
+        assert_eq!(right.from, "no-worry-back");
+        assert_eq!(right.report.nodes, 0, "the full arm searched nothing");
+        assert_eq!(
+            right.report.line.as_ref().map(Vec::len),
+            left.report.line.as_ref().map(Vec::len),
+            "the same line, and it is the one that was replayed"
+        );
+    }
+
+    /// A carried verdict must be legible as carried: it cost no nodes, and a
+    /// reader auditing which arm proved what cannot be left to guess.
+    #[test]
+    fn a_carried_verdict_says_so_in_its_record() {
+        let answer: Answer<gypsy_core::Move> =
+            Answer::carried(Verdict::Solvable, None, "no-worry-back");
+        let text = record_of("gypsy", 21, "full", &answer, cheap(), false);
+        assert!(text.contains(r#""ruleset":"full""#), "{text}");
+        assert!(text.contains(r#""verdict_from":"no-worry-back""#), "{text}");
+        assert!(text.contains(r#""nodes":0"#), "{text}");
+    }
+
+    /// A searched verdict says that too, so the field is never ambiguous.
+    #[test]
+    fn a_searched_verdict_is_labelled_search() {
+        let restricted = Gypsy::new(MoveOptions::NO_WORRY_BACK);
+        let report = solve(&restricted, &State::deal(21), cheap()).expect("seed 21 solves");
+        let text = record_of(
+            "gypsy",
+            21,
+            "no-worry-back",
+            &Answer::searched(report),
+            cheap(),
+            false,
+        );
+        assert!(text.contains(r#""verdict_from":"search""#), "{text}");
     }
 
     /// A worker costs its table and its stack, and the stack is not small.

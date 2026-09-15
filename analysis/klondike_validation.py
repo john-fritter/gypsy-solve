@@ -24,7 +24,11 @@ comparison is withheld: the published figure is the worry-back variant, so a
 restricted run neither passes nor fails this test. It is measuring a different
 game and would fail a comparison it was never making.
 
-Usage: python3 analysis/klondike_validation.py results.jsonl
+A `--both-arms` file holds both rulesets, and they are summarised one after the
+other, never pooled. Pooling two different games would manufacture a figure
+belonging to neither, and the risk is that it manufactures a *passing* one.
+
+Usage: python3 analysis/klondike_validation.py results.jsonl [RULESET]
 """
 
 import json
@@ -50,7 +54,7 @@ def wilson(successes, total, z=1.96):
     return (max(0.0, centre - spread), min(1.0, centre + spread))
 
 
-def main(path):
+def main(path, wanted=None):
     with open(path) as handle:
         rows = [json.loads(line) for line in handle if line.strip().startswith("{")]
 
@@ -58,11 +62,24 @@ def main(path):
         sys.exit(f"no results in {path}")
 
     # Older files predate the field; those runs are all the full variant.
-    rulesets = {row.get("ruleset", "full") for row in rows}
-    if len(rulesets) > 1:
-        sys.exit(f"{path} mixes rulesets {sorted(rulesets)}; split it before summarising")
-    ruleset = rulesets.pop()
+    for row in rows:
+        row.setdefault("ruleset", "full")
+    rulesets = sorted({row["ruleset"] for row in rows})
+    if wanted is not None:
+        if wanted not in rulesets:
+            sys.exit(f"{path} holds {rulesets}, not {wanted!r}")
+        rulesets = [wanted]
 
+    for at, ruleset in enumerate(rulesets):
+        if at:
+            print()
+            print("-" * 60)
+            print()
+        summarise([row for row in rows if row["ruleset"] == ruleset], ruleset)
+
+
+def summarise(rows, ruleset):
+    """One arm. Never called with two rulesets mixed together."""
     counts = Counter(row["verdict"] for row in rows)
     n = len(rows)
     solvable = counts["solvable"]
@@ -115,4 +132,7 @@ def main(path):
 
 
 if __name__ == "__main__":
-    main(sys.argv[1] if len(sys.argv) > 1 else "-")
+    main(
+        sys.argv[1] if len(sys.argv) > 1 else "-",
+        sys.argv[2] if len(sys.argv) > 2 else None,
+    )

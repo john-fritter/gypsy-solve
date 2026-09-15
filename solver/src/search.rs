@@ -252,7 +252,13 @@ pub fn solve<G: Game>(
 }
 
 /// Replays a line from the opening position and checks that it wins.
-fn replay<G: Game>(game: &G, start: &G::Position, line: &[G::Action]) -> Result<(), String> {
+///
+/// Public because a line is not always believed by the search that produced
+/// it. A win found under a restricted ruleset is also a win under a
+/// permissive one, and a caller carrying a line across that way owes the same
+/// check as the search does: the point of replaying is that a claimed win is
+/// never taken on trust, and a carried claim is still a claim.
+pub fn replay<G: Game>(game: &G, start: &G::Position, line: &[G::Action]) -> Result<(), String> {
     let mut state = start.clone();
     for (index, &action) in line.iter().enumerate() {
         game.apply(&mut state, action)
