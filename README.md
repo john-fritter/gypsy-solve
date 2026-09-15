@@ -54,8 +54,12 @@ hitting it means something is wrong rather than that it needs raising. `--json` 
 flat object per deal; `--trace PATH` writes the winning line in a form
 `gypsy replay --moves-file PATH --step` will walk.
 
-The solver applies no dominances. It is the baseline that later cuts get
-measured against, and on a real Gypsy deal it mostly returns `unknown`.
+The solver applies one dominance, and only in the restricted game: with
+`--no-worry-back` a card that can never be wanted in the tableau again is
+played up and nothing else is considered at that position. It is gated because
+the proof is — worry-back lets the cards the rule checks come back down, and
+then the rule proves nothing. The full game has no dominance at all, and on a
+real Gypsy deal it mostly returns `unknown`.
 
 ## Batch runs
 

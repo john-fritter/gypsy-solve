@@ -155,8 +155,19 @@ than trivia:
 Consequences for the CLI: bounded concurrency, per-deal records written
 incrementally, resume after a kill without redoing completed deals, a
 configurable output path, and a refusal to start or continue when free space
-runs low. Storage and memory provisioning is a prerequisite for a
-thousands-of-deals run, not something to resolve mid-run.
+runs low. All of that is `gypsy batch` as of 2026-09-15. Storage and memory
+provisioning is a prerequisite for a thousands-of-deals run, not something to
+resolve mid-run.
+
+**A worker costs more than its table, corrected 2026-09-15.** Peak resident
+memory used to be about the table size only because the search was thrashing
+rather than descending. With the probing table a 12M-node Klondike solve ran
+413 MiB *over* its table, bounded by `--max-depth` at roughly four KiB a frame,
+so around 390 MiB at the default. Four workers at 1 GiB of table each therefore
+want about 5.5 GiB, not 4, against the ~4.9 GiB this box has available — so
+four workers at that table size does not fit and never did. `gypsy batch`
+refuses such a run up front rather than being killed hours in, which is what
+happened here on 2026-09-15.
 
 ## Validation
 
@@ -193,7 +204,16 @@ budget-exhausted.
    the argument — expanding a position generates all its children, so skipping
    anything already expanded cannot hide a win — and the table is now a plain
    set of expanded positions.
-6. **Dominances. This is where work resumes.** One per PR, each with a proof
+6. **Make the table keep what it records.** Done 2026-09-15. The table was
+   direct-mapped and replaced unconditionally, on the reasoning that a lost
+   entry costs one re-expansion. Two keys sharing a slot evict each other
+   indefinitely when both sit on a hot path: Gypsy deal 2 spent 91% of a 3M
+   budget re-expanding, Klondike deal 3 wasted 32%. Probing eight slots
+   forward fixed it. Worth about one fourfold budget step — Klondike's unknown
+   bucket went 20 to 17, 17 to 14 and 13 to 11 at 3M, 12M and 48M — and it
+   changed the memory profile, because the search now descends instead of
+   thrashing. See `DECISIONS.md`.
+7. **Dominances.** One per PR, each with a proof
    that it cannot discard a winning line. Candidates, cheapest and most clearly
    provable first:
 
@@ -224,20 +244,58 @@ budget-exhausted.
       search needs something that is not a dominance.
 
    Every one of these is measured on the same Klondike deal set, and Klondike
-   is now a regression test with teeth: a dominance may change node counts and
+   is a regression test with teeth: a dominance may change node counts and
    how many deals resolve, and must **not** change any verdict that was already
    decided, and must leave 81.945% inside the validation bracket. A dominance
    that flips a decided verdict is a wrong dominance, and that is exactly the
    failure this project is least able to detect any other way.
-7. Batch runner, then batch runs. Worry-back enabled. Analysis + writeup.
-8. WASM front end, last.
+
+   **That harness has a hole, found 2026-09-15.** Klondike here is the
+   published *worry-back* variant, so a dominance gated on worry-back being
+   off — which safe autoplay is, and any correct version of the dead two would
+   have been — never fires in it and is never checked by it. Safe autoplay was
+   checked instead on Gypsy no-worry-back deals, where nine of fifty resolve
+   against Klondike's thirty: far less signal, on the dominance this project
+   is least able to detect an error in. **Giving `klondike/` a no-worry-back
+   mode is the next thing worth doing**, and it needs the safe-autoplay rule
+   implemented a second time for one deck and four foundations, with its own
+   proof.
+8. **Batch runner.** Done 2026-09-15: `gypsy batch`, generic over the `Game`
+   trait, bounded concurrency, one record appended per deal as it finishes,
+   `--resume` by seed, and refusals on memory and free space. The batch *runs*
+   are still gated on the section below.
+9. Batch runs. Worry-back enabled. Analysis + writeup.
+10. WASM front end, last.
+
+### Where work resumes
+
+**Close the validation hole: give `klondike/` a no-worry-back mode and
+implement safe autoplay for it.** Safe autoplay is the only dominance the
+project has and the only one on the list that is not dead, and it is currently
+checked on the weakest set available. Until Klondike can exercise it, the cut
+carrying the most weight is the one with the least evidence behind it. The
+Klondike rule is the single-deck one — two opposite-colour foundations, not
+four — so it is a second implementation and needs its own proof.
+
+After that, in rough order: a dominance that survives worry-back, which is the
+only thing that moves the headline figure; then the 1,000-deal Klondike
+validation the gate below is written against, which `gypsy batch` is now built
+for.
 
 ### Do not run a Gypsy batch yet
 
-The Klondike unknown bucket was 40% at a 3M budget on 2026-09-13. While it is
-that large the validation bracket spans roughly thirty points, which is
-consistent with a correct search and cannot distinguish one from a search that
-misses wins systematically.
+The Klondike unknown bucket stands at **22% on 50 deals at a 48M budget**
+(2026-09-15, probing table), and 34% at 3M. It was 40% at 3M on 2026-09-13.
+While it is anywhere near this large the validation bracket spans tens of
+points, which is consistent with a correct search and cannot distinguish one
+from a search that misses wins systematically.
+
+**Budget will not close it.** Swept at 3M, 12M and 48M, the bucket falls by a
+factor of about 0.804 per fourfold step, and that slope did not change when
+the table was fixed — the curve moved down, not round. From 11 unknown, the 5%
+gate is about 6.8 further fourfold steps, roughly 10^4 times the budget. The
+route has to be dominances or something that is not a dominance at all, not a
+bigger number on `--budget`.
 
 Two thresholds, and they are different:
 
