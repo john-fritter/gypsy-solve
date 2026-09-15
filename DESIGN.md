@@ -299,6 +299,32 @@ that is not a dominance at all.
 After that: the 1,000-deal Klondike validation the gate below is written
 against, which `gypsy batch` is now built for.
 
+**How a dominance gets checked**, settled 2026-09-15 and worth following
+rather than re-deriving:
+
+- Pick the arm the rule fires in. A worry-back dominance goes on the **full**
+  Klondike arm, which also has the 81.945% bracket to stay inside. A rule
+  gated on worry-back being off goes on `--no-worry-back`, which validates
+  against no published figure and is only a before-and-after comparison.
+- Build the comparison arm by copying the tree and deleting the rule from
+  `legal_actions`. There is deliberately no runtime toggle: a dominance that
+  can be switched off is one nobody has committed to.
+- Run both arms over the same seeds and budget and compare per seed. The bar
+  is: **no verdict contradicted, none regressed to `unknown`, and identical
+  line lengths on the deals solvable in both.** Node counts are the payoff,
+  not the test.
+- The test that has teeth is the deals proved **unsolvable**, because that is
+  the direction a discarded winning line fails in. A set that proves none —
+  as the Gypsy no-worry-back set does — cannot catch the error at all, which
+  is what went wrong the first time. `klondike --no-worry-back` proves 9 to 10
+  of 50 at 3M; the full arm proves 9 of 50.
+- Re-run the arm you did *not* change and diff it against the recorded run in
+  `docs/results/`. Threading an option through `legal_actions` touches every
+  caller, and "the other arm is untouched" is worth checking rather than
+  assuming.
+- Keep both result files in `docs/results/` as `<game>-<arm>-<budget>-<n>deals
+  -{baseline,<rule>}.jsonl`, and append the decision entry with the table.
+
 ### Do not run a Gypsy batch yet
 
 The Klondike unknown bucket stands at **22% on 50 deals at a 48M budget**
