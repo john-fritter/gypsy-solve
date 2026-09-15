@@ -1541,3 +1541,82 @@ Dagstuhl and Semantic Scholar are all blocked by this session's egress proxy;
 only GitHub is reachable. Everything above is read out of source and repo
 documentation, not the papers. The rule statements should be checked against
 Blake & Gent by someone who can open it before either port is called proven.
+
+## 2026-09-15 — The paper answers back: two decks are outside its proof, and a different rule is the one to take
+
+**Status:** firm. Supersedes the recommendation in *The worry-back dominance
+exists and is published* (earlier today), which stands as a record of what was
+believed from source code alone.
+
+Gizmo retrieved Blake & Gent and answered the questions in
+`docs/research/literature-questions.md`; the report is
+`docs/reports/literature-brief-20260915T203648Z.md`. Two of this morning's
+conclusions were wrong.
+
+**Wrong 1: "port Keller's rule to two decks" was presented as licensed by the
+paper. It is not.** The safe-foundation theorem excludes multiple decks in
+terms:
+
+> we assume that we do not have multiple decks: i.e. while the theorem applies
+> to a single deck with eight different suits of two colours, it does not apply
+> to a game with two copies of the standard deck. The occurrence of duplicate
+> cards leads to potential edge cases that we do not consider in this proof.
+
+Solvitaire's `if (rules.two_decks) return false;` is that boundary enforced, not
+an engineering shortcut as the earlier entry guessed. The worry-back ban is a
+corollary of the same theorem and inherits the restriction. **Unproven for two
+decks, not disproven** — but a port would be an extension of the paper, not an
+application of it, and must be argued as such.
+
+**Wrong 2: the flag raised against our own shipped rule is withdrawn.** The
+paper gives two ways to qualify. With worry-back allowed: opposite-colour
+foundations within two ranks and the same-colour twin within three. With
+worry-back suppressed, *additionally*: opposite-colour foundations within one
+rank. Our `never_wanted_in_the_tableau` implements the second, generalised from
+two suit foundations to our four slots, against foundations stored as top rank
+with 0 for empty — which is the paper's convention. It is the published
+condition, not a permissive variant of it. **No correction owed.**
+
+It is however *weaker* than the published rule, because we implement only one of
+the two disjuncts. Adding the first would prune more in the restricted arm, and
+needs the twin condition proved for four slots the way the current one was.
+
+**What we should take instead: the incomplete-pile dominance (Appendix B.2),
+which the earlier survey missed entirely.** Unlike the safe-foundation theorem
+it is deliberately generalised past a single deck — the paper's own worked
+example is five identical decks. It says an incomplete built pile need only be
+moved when the card above it is then built immediately to foundation.
+
+Its hypotheses want an "indistinguishable" build policy, where two cards have
+identical or disjoint build destinations and the same policy governs single-card
+and group moves. **Gypsy appears to qualify precisely because of the permissive
+variant `CLAUDE.md` forbids correcting away:** any alternating-colour sequence
+moves as a unit, so group and single-card policies agree. The paper explicitly
+excludes standard Spider for failing exactly that test — its singles move by any
+suit, its groups only by one.
+
+Two hypotheses are unchecked and are not to be assumed: whether a stock that
+deals to every column counts as "a rule invalidating moves by constraints on
+their order", and whether the proof hides a dependence on foundations being
+irremovable. The first is the same hazard that killed two dominances on
+2026-09-11 and deserves the same suspicion.
+
+**Answered, and it closes a `DESIGN.md` open question: no published Gypsy
+figure exists.** A clean negative across the paper, the solver presets and a
+bibliographic search — no peer-reviewed, preprint or solver-source winnability
+figure for Gypsy or Gipsy. The one hit is a 2019 WPI report that generates the
+game rather than measuring it, and is explicitly not peer reviewed. The close
+relatives are genuinely distinct games and their figures do not transfer.
+
+**Calibration, which is the sobering part.** The paper reports two two-deck
+games. Mrs Mop resolves to 0.12% unknown over two million instances, so two
+decks alone do not make a game intractable. Spider — two decks *and* a stock
+dealing to every column, which is Gypsy's mechanic — is their worst resolved
+fraction by a factor of twenty, at 2.69% unknown over ten thousand. Gypsy is in
+the harder family and additionally cannot use the foundation dominances.
+
+**Recorded about method, because it cost a day.** The first survey was built
+from solver source because the papers were unreachable, and source is precise
+about *what* a rule is while silent about *what it assumes*. Both errors above
+are of that kind: a threshold read correctly, a hypothesis invisible. Where a
+proof boundary matters, read the proof.

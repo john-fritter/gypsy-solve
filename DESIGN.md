@@ -308,10 +308,11 @@ Three things follow, in this order:
    deals at 5M: the full arm goes from **0 of 50 resolved to 12**, for 13.4%
    fewer nodes, and both arms reproduce the separate runs exactly. See
    `DECISIONS.md`.
-2. **Port Keller's rule to two decks**, which gives the full game its first
-   dominance and may change the picture below entirely. Then the **capped
-   arm**, `--worry-back-limit k` swept over *k*, as the fallback it was
-   always meant to be: if the uncapped arm still resolves nothing, a lower
+2. **Check Gypsy against the incomplete-pile theorem's hypotheses** and, if it
+   qualifies, implement it: a published multi-deck-general dominance, and the
+   first the full game would ever have. Then the **capped arm**,
+   `--worry-back-limit k` swept over *k*, as the fallback it was always meant
+   to be: if the uncapped arm still resolves nothing, a lower
    bound is the only form the worry-back delta can take. One constraint
    settled in advance — worry-backs spent is path state and the table stores
    positions, so an exhausted capped search proves *no win within k*, never
@@ -328,29 +329,32 @@ each burning the whole budget. A cap makes the search drown in the breadth of a
 game where any alternating-colour sequence moves as a unit; uncapped it drowns
 in depth. See `DECISIONS.md`.
 
-**A dominance that survives worry-back exists, is published, and this document
-was wrong to say otherwise.** Corrected 2026-09-15 after reading the reference
-solvers; see `docs/research/prior-art.md`.
+**A dominance that survives worry-back exists and is published — but not for two
+decks.** Corrected twice on 2026-09-15: first against the reference solvers,
+then against the paper itself. See `docs/research/prior-art.md` and the report
+in `docs/reports/`.
 
-It is **Keller's rule**, proven for one deck in Blake & Gent's Appendix B.1 and
-shipping in both Solvitaire and lonelybot. A card of rank *r* and colour *c* is
-forcible to the foundation, **with worry-back legal**, when it is playable and
+Blake & Gent's safe-foundation rule does hold with worry-back legal, at a
+stronger threshold than the no-worry-back one: opposite-colour foundations
+within two ranks *and* the same-colour twin within three. A **worry-back ban**
+comes with it as a corollary — never worry back a card that would immediately
+be safely buildable again.
 
-```
-f(both opposite-colour suits) >= r - 1
-f(the other suit of colour c) >= r - 2
-```
+**Both are proved for a single deck only, and the paper says so outright:**
+duplicate cards "lead to potential edge cases that we do not consider in this
+proof". Solvitaire's two-deck guard is that boundary enforced. For Gypsy these
+are unproven rather than unavailable, and adopting either means extending the
+paper, with our own duplicate-card argument, exactly as our existing safe
+autoplay was proved rather than inherited.
 
-The second line is what our version is missing, and it is the whole reason ours
-needed the gate. There is a published **worry-back ban** to go with it — never
-worry a card back while it is safe-automovable — which falls out of the same
-theorem and costs almost nothing once the first rule is in.
-
-Neither is proven for two decks: Solvitaire disables foundation dominances
-outright when `two_decks` is set, so the ports need the same four-pile
-treatment we gave our own safe autoplay, and their own proofs. That is the work,
-and it is a port with a template rather than a search for an argument nobody
-has.
+**The rule to take first is a different one: the incomplete-pile dominance**
+(Appendix B.2), which *is* generalised past a single deck — an incomplete built
+pile need only be moved when the card above it is built immediately to
+foundation. Gypsy looks to qualify because of the permissive group-move rule:
+its hypotheses want single-card and group moves to follow the same policy,
+which is exactly what standard Spider fails and we satisfy. Two hypotheses are
+unchecked — the deals-to-every-column stock, and whether the proof depends on
+foundations being irremovable — and neither is to be assumed.
 
 **Also open, and not a dominance:** in *Klondike's* full arm the wins are found
 either almost instantly or at enormous cost — twelve of 29 under 500 nodes,
@@ -453,7 +457,12 @@ than shipping one large bundle.
 - What node budget makes the unknown bucket acceptably small?
 - Is the correct worry-back dominance provable here, or only a conservative
   approximation?
-- Confirm no published Gypsy winnability figure exists before claiming novelty.
+- ~~Confirm no published Gypsy winnability figure exists before claiming
+  novelty.~~ **Answered 2026-09-15: none exists.** A clean negative across the
+  paper, Solvitaire's presets and a bibliographic search. The one hit generates
+  Gypsy rather than measuring it and is explicitly not peer reviewed. The close
+  relatives — Irmgard, Blockade, Miss Milligan, Gargantua, Spider — are
+  distinct games whose figures do not transfer. See `docs/reports/`.
 - Does the mobile app's shuffle look uniform? (Probably unanswerable without
   extracting deals from it — leave it out unless there's a clean way.)
 - Where does the full batch actually run? fritter.lol as it stands cannot host a
