@@ -1369,3 +1369,98 @@ the test shows only that a depth-capped search does not find them within 5M
 nodes, which is a statement about the search. Line length remains a measurement
 of how the solver wanders, not of the game, exactly as the worry-back counts
 were.
+
+## 2026-09-15 — Both arms in one run, with each arm's proof carried to the other
+
+**Status:** firm.
+
+`DESIGN.md` has always described the experiment as every deal solved twice,
+worry-back off and then on. That meant two independent batch runs, each
+re-deriving what the other had already proved. `gypsy batch --both-arms` solves
+both rulesets per deal and writes a record for each.
+
+**The two implications, and they are not symmetric.** The restricted game
+generates a subset of the full game's moves and differs in nothing else, so:
+
+- **a restricted win is a full win** — every move of the line is legal in the
+  full game, so it replays there move for move;
+- **a full refutation is a restricted refutation** — an exhausted full search
+  visited every position the subset could have reached.
+
+Neither carries back. A full win may have used worry-back, which the restricted
+game cannot do; a restricted refutation says nothing about a game with strictly
+more moves in it. That second gap *is* the worry-back delta, which is why it
+cannot be short-circuited.
+
+**The carried line is replayed, not assumed.** A claimed win has been replayed
+before it was believed since 2026-09-11, and a carried claim is still a claim.
+A line that failed to replay under the full game would stop the run the same
+way a bad search result does.
+
+**Only the first carry is expected to pay.** Refuting the full game means
+exhausting a strictly larger graph, so an arm that can do that at a given
+budget can almost always refute the restricted game directly. Klondike seed 2
+refutes in both arms independently, at 909 and 1,231 nodes. The second carry is
+kept because it is sound and free, not because it is expected to fire.
+
+**Measured**, 50 Gypsy deals, 5M budget, 512 MiB table — the parameters of the
+two runs it replaces, so the comparison is exact. Raw results in
+`docs/results/gypsy-both-5M-50deals.jsonl`.
+
+| Gypsy, 5M | Solvable | Unknown | of which carried |
+|---|---|---|---|
+| no-worry-back | 12 | 38 | 0 |
+| full | **12** | 38 | **12** |
+
+The full arm resolved **0 of 50 on its own and 12 of 50 with the carry**. The
+restricted arm reproduced `gypsy-nwb-5M-50deals-autoplay` exactly — verdict,
+nodes and line length on all 50 — and every searched full-arm record reproduced
+`gypsy-full-5M-50deals` exactly. The carried seeds are exactly the restricted
+arm's twelve wins.
+
+Nodes fell from 449,029,778 to 389,029,778, **13.4% less** for twelve more
+verdicts. The saving is precisely the 5M the full arm was spending on each of
+those twelve deals and now spends on none; how large it is in general depends
+on what the full arm would otherwise have spent, and here that was the whole
+budget every time.
+
+**`verdict_from` is new on every record**, naming the arm that established the
+verdict — `"search"`, or the ruleset it came from. A carried verdict spent no
+nodes and filled no table, and a reader counting work or auditing which arm
+proved what should not have to infer it from a zero. Single-arm runs write
+`"search"` throughout, so the schema does not fork.
+
+**Resume needed two fixes, and both were silent-corruption risks** that only
+exist once a deal writes two records. Both arms go down in one write, but a
+kill can still land between them:
+
+- `recorded_seeds` now counts a seed as done only when every ruleset the run
+  writes is present. Without that, a resumed run skips a deal that has one arm
+  and the results file is quietly missing it.
+- A *complete but orphaned* record left at the tail is dropped before resuming.
+  Leaving it would double-count that arm once the deal is solved again — which
+  is worse than the first failure, because it inflates a count rather than
+  shrinking one.
+
+Both are pinned by tests. Only the tail can be incomplete, which is why the
+second truncates rather than rewriting the file.
+
+**The validation script summarises the arms separately and never pools them.**
+It used to refuse a mixed file, which was right when nothing produced one.
+Pooling two different games would manufacture a figure belonging to neither,
+and the danger is a manufactured *pass*.
+
+**A hole found while testing that, and it predates this change.**
+`analysis/klondike_validation.py` never checked which game it was reading, so
+handed a Gypsy file it printed `CONSISTENT: the published figure is inside the
+bracket` against Klondike's 81.945%. It now refuses any run that does not say
+`"game":"klondike"`, including one that says nothing — an unlabelled file is
+exactly the case that cannot be checked. `gypsy solve --json` now names its
+game too, as the Klondike and batch writers already did. The two Gypsy files in
+`docs/results` written before this are unlabelled and are correctly refused.
+
+**Rejected: a `--carry-from FILE` flag** reading a previous arm's results. It
+needs seed matching, budget and ruleset validation, and a policy for missing
+seeds — more plumbing and more ways to be wrong — and it still forces two
+sequential runs to get what one run now does. Solving the pair together is what
+makes the carry free.

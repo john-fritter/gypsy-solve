@@ -340,7 +340,7 @@ fn json_report(seed: u64, args: &SolveArgs, report: &Report<Move>) -> String {
     let line = line_json(report.line.as_deref());
     format!(
         concat!(
-            r#"{{"seed":{},"ruleset":"{}","verdict":"{}","limit":"{}","nodes":{},"#,
+            r#"{{"game":"gypsy","seed":{},"ruleset":"{}","verdict":"{}","limit":"{}","nodes":{},"#,
             r#""line_length":{},"elapsed_ms":{},"node_budget":{},"max_depth":{},"#,
             r#""table_capacity":{},"table_filled":{},"line":{}}}"#
         ),

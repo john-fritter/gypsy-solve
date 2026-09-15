@@ -300,13 +300,13 @@ search on this shape of solver at any budget worth discussing.
 
 Three things follow, in this order:
 
-1. **Carry verdicts between the two arms.** The restricted game's moves are a
-   subset of the full game's, so a restricted `solvable` is a full `solvable`
-   and a full `unsolvable` is a restricted `unsolvable`. That alone takes the
-   Gypsy full arm from 0 of 50 to 12 of 50 at zero compute. Every deal is
-   solved twice by design; neither arm should re-derive what the other proved.
-   This was ranked low when it was worth 2 Klondike deals. On Gypsy it is worth
-   every verdict the full arm has.
+1. ~~**Carry verdicts between the two arms.**~~ **Done 2026-09-15**, as
+   `gypsy batch --both-arms`. A restricted `solvable` is a full `solvable` and
+   a full `unsolvable` is a restricted `unsolvable`; the carried line is
+   replayed under the full game rather than assumed. Measured on the same 50
+   deals at 5M: the full arm goes from **0 of 50 resolved to 12**, for 13.4%
+   fewer nodes, and both arms reproduce the separate runs exactly. See
+   `DECISIONS.md`.
 2. **The capped arm**, `--worry-back-limit k` swept over *k*, which is now the
    primary instrument for the headline number rather than a fallback: if the
    uncapped arm resolves nothing, a lower bound is the only form the

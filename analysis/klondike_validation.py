@@ -61,6 +61,19 @@ def main(path, wanted=None):
     if not rows:
         sys.exit(f"no results in {path}")
 
+    # This compares against a *Klondike* figure, so it must be a Klondike run.
+    # Refusing an unlabelled file is the conservative reading: the failure this
+    # guards against is printing CONSISTENT for a run of a different game,
+    # which is a manufactured pass and the worst output this script has.
+    games = {row.get("game") for row in rows}
+    if games != {"klondike"}:
+        named = sorted(g for g in games if g) or ["nothing"]
+        sys.exit(
+            f"{path} is a run of {', '.join(named)}, not klondike; "
+            f"this script compares against a Klondike figure and will not "
+            f"summarise another game as though it were one"
+        )
+
     # Older files predate the field; those runs are all the full variant.
     for row in rows:
         row.setdefault("ruleset", "full")
