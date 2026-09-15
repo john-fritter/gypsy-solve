@@ -1296,3 +1296,76 @@ alternative and the reason it was passed over.
 of the game is exactly the restricted game, so safe autoplay is sound again from
 that point. Attractive, and subject to the same path-versus-position problem, so
 it needs its own proof rather than an appeal to this entry.
+
+## 2026-09-15 — The Gypsy full arm resolves nothing, and a depth cap does not rescue it
+
+**Status:** firm as a measurement.
+
+Every Gypsy result in this repo was the restricted arm. The headline figure is
+the worry-back one, so the full arm was run — 50 deals, 5M budget, 512 MiB
+table, `max_depth` 100,000, which are the restricted arm's parameters exactly,
+so the two are directly comparable. Raw results in
+`docs/results/gypsy-full-5M-50deals.jsonl`.
+
+| Gypsy, 50 deals, 5M | Solvable | Unsolvable | Unknown |
+|---|---|---|---|
+| worry-back off, with safe autoplay | 12 | 0 | 38 |
+| worry-back on | **0** | 0 | **50** |
+
+All 50 stopped on the budget; none hit the depth guard. Neither arm is
+thrashing — both fill about 5M distinct positions out of 5M expansions, so this
+is the size of the reachable graph, not a repeat of the table bug.
+
+**The headline figure is not reachable by direct search.** The worry-back delta
+needs both arms, and the full arm resolves nothing whatsoever. Klondike's full
+arm at least resolves 33 of 50; Gypsy's resolves zero. Whatever else follows,
+no amount of budget on this shape of search produces the number this project
+exists to produce.
+
+**Free, and now the most valuable cheap change available.** The restricted
+game's moves are a subset of the full game's, so a restricted `solvable` is a
+full `solvable` — the same line replays move for move. Carrying the restricted
+arm's verdicts across takes the full arm from 0 of 50 to **12 of 50** at zero
+compute. On Klondike the same trick was worth 2 deals of 50 and was ranked low;
+on Gypsy it is worth every verdict the full arm has. The converse holds too: a
+full-arm `unsolvable` is a restricted `unsolvable`. Every deal is solved twice
+by design, so neither arm should be re-deriving what the other proved.
+
+**Gypsy winning lines are enormous, and nobody had looked.** The recorded
+restricted-arm wins run **1,301 to 99,982 moves**, against Klondike's 136 to
+467. Seed 40's line ends 18 frames short of the 100,000 depth guard. A 104-card
+game needs about 104 foundation plays; the rest is shuffling. `DESIGN.md` calls
+that guard "not a tuning knob — hitting it is a sign something is wrong rather
+than a limit to raise", and it is very nearly binding. The 4 KiB per frame it
+permits is exactly the memory cost recorded on 2026-09-15.
+
+**The obvious inference from that is wrong, and it was tested rather than
+assumed.** If the search finds wins by plunging, capping depth should find
+shorter wins sooner. Measured on four deals whose uncapped wins are known,
+restricted arm, 5M budget. Raw results in
+`docs/results/gypsy-nwb-5M-depth-sweep.jsonl`.
+
+| Seed | uncapped | cap 200 | cap 400 | cap 800 | cap 1600 |
+|---|---|---|---|---|---|
+| 21 | 1,301 | — | — | — | 1,301 |
+| 9 | 1,520 | — | — | **799** | 1,520 |
+| 10 | 8,480 | — | — | — | — |
+| 16 | 7,953 | — | — | — | — |
+
+A dash is `unknown` after burning the whole 5M. Only seed 9 improved. Seed 21
+needs a cap of 1,600 to find the win it finds uncapped in 2,167 nodes, and
+seeds 10 and 16 resolve at no cap tried.
+
+**Why it fails, and it is worth stating because it characterises the game.**
+A cap makes depth-first search backtrack constantly, and it then drowns in the
+*breadth* of a game where any alternating-colour sequence moves as a unit and
+almost every position offers dozens of shuffles. Uncapped, it drowns in depth
+instead. There is no middle setting, and a capped search that fails costs the
+entire budget rather than failing cheaply. **Rejected as a lever**, on this
+evidence; one deal improving is not enough to carry it.
+
+**What this does not settle.** Shorter wins may well exist for seeds 10 and 16 —
+the test shows only that a depth-capped search does not find them within 5M
+nodes, which is a statement about the search. Line length remains a measurement
+of how the solver wanders, not of the game, exactly as the worry-back counts
+were.

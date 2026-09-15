@@ -292,23 +292,39 @@ worry-back. Across fifty deals worry-back is not known to have changed one
 verdict — while the published arm pays its branching factor at every node. See
 `DECISIONS.md`.
 
-That does not measure the Gypsy delta, which is the headline figure and which
-nothing in this repo has yet touched. It does say the full arm's 22% unknown
-bucket is partly self-inflicted. Two things follow, in this order:
+**And then, same day, the Gypsy full arm was run for the first time** — 50
+deals, 5M, the restricted arm's parameters exactly. It resolves **0 of 50**,
+against the restricted arm's 12. Klondike's full arm at least resolves 33 of
+50; Gypsy's resolves nothing. The headline figure is not reachable by direct
+search on this shape of solver at any budget worth discussing.
 
-1. **Run the Gypsy full arm at all.** Every Gypsy result here is the restricted
-   arm. Every design choice for the headline search is currently being made
-   from Klondike's shape, and Gypsy is the bigger game — its cheapest
-   restricted win costs 2,167 nodes against Klondike's 136. A 50-deal
-   diagnostic run, explicitly not a published figure, gives the verdict split,
-   the node distribution and the same worry-back count for whatever wins come
-   back. Sizing a cap from Klondike alone would be sizing it from the wrong
-   game.
-2. **Then the capped arm**, `--worry-back-limit k` swept over *k*. Sound as a
-   lower bound, which `DESIGN.md` has always permitted, with one constraint
-   settled in advance: worry-backs spent is path state and the table stores
-   positions, so an exhausted capped search proves *no win within k*, never
-   `Unsolvable`. `Unsolvable` must map to `Unknown` in that arm.
+Three things follow, in this order:
+
+1. **Carry verdicts between the two arms.** The restricted game's moves are a
+   subset of the full game's, so a restricted `solvable` is a full `solvable`
+   and a full `unsolvable` is a restricted `unsolvable`. That alone takes the
+   Gypsy full arm from 0 of 50 to 12 of 50 at zero compute. Every deal is
+   solved twice by design; neither arm should re-derive what the other proved.
+   This was ranked low when it was worth 2 Klondike deals. On Gypsy it is worth
+   every verdict the full arm has.
+2. **The capped arm**, `--worry-back-limit k` swept over *k*, which is now the
+   primary instrument for the headline number rather than a fallback: if the
+   uncapped arm resolves nothing, a lower bound is the only form the
+   worry-back delta can take. One constraint settled in advance — worry-backs
+   spent is path state and the table stores positions, so an exhausted capped
+   search proves *no win within k*, never `Unsolvable`. `Unsolvable` must map
+   to `Unknown` in that arm.
+3. **Then re-measure.** Whether the delta is even visible between *k*=0 and
+   small *k* decides whether the headline finding survives in any form.
+
+**Tried and rejected, 2026-09-15: capping depth.** Gypsy winning lines run
+1,301 to 99,982 moves against Klondike's 136 to 467, and seed 40's ends 18
+frames short of the depth guard — so it looks as though the search finds wins
+by plunging and a depth cap should find shorter ones sooner. It does not. Of
+four deals with known wins, only one improved; two resolved at no cap tried,
+each burning the whole budget. A cap makes the search drown in the breadth of a
+game where any alternating-colour sequence moves as a unit; uncapped it drowns
+in depth. See `DECISIONS.md`.
 
 **A dominance that survives worry-back** remains open and remains the only
 thing that would move the full arm without bounding it. Nothing on the current
@@ -317,8 +333,8 @@ card to be out of reach once it is up, which is the one thing worry-back
 denies, so the next rule has to be a different shape of argument rather than a
 repair of this one.
 
-**Also open, and not a dominance:** the wins in the full arm are found either
-almost instantly or at enormous cost — twelve of 29 under 500 nodes, median
+**Also open, and not a dominance:** in *Klondike's* full arm the wins are found
+either almost instantly or at enormous cost — twelve of 29 under 500 nodes, median
 12,696, then a tail to 29.8M, while the eleven unknowns each burn 48M. That is
 the profile of a search committed to the wrong subtree near the root rather
 than one facing a graph slightly too large, and it is consistent with the 0.804
