@@ -208,12 +208,20 @@ budget-exhausted.
       `DECISIONS.md`, 2026-09-14.
    2. ~~*Whole-column-onto-empty.*~~ **Dead, 2026-09-14.** Same argument, same
       two failures. Pinned by tests in `core/src/state.rs`.
-   3. *Safe autoplay.* The dangerous one, and the reason `CLAUDE.md` says to
-      assume any inherited dominance is wrong. It must be proved separately for
-      the worry-back and no-worry-back cases, or not used. **With the two
-      cheap candidates dead this is the only dominance left on the list**, so
-      either it is made to work or the search needs something that is not a
-      dominance at all.
+   3. *Safe autoplay.* **Done for the no-worry-back game, 2026-09-15**, and
+      it is the first cut that has paid: no verdict contradicted, three more
+      deals resolved out of fifty, and 41% fewer nodes on the deals decided
+      both with and without it. The rule needed correcting for two decks —
+      all *four* opposite-colour foundation piles, not two.
+
+      **Still open for the worry-back game, which is the headline figure.**
+      The proof needs the opposite-colour cards to be on foundations and
+      unable to leave, and worry-back is exactly the rule that lets them
+      leave. The repair that suggests itself — play it up, worry it back if
+      it is ever wanted — is circular under a transposition table and is
+      written up in `DECISIONS.md` so nobody re-derives it. So the full game
+      still has no dominance at all, and either one is found for it or the
+      search needs something that is not a dominance.
 
    Every one of these is measured on the same Klondike deal set, and Klondike
    is now a regression test with teeth: a dominance may change node counts and

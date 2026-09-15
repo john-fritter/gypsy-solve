@@ -1015,3 +1015,85 @@ sorts, and the analysis script already does.
 second source of truth that can disagree with the first. Also rejected:
 `--force` escapes on the two guards. Both guards fire on conditions that have
 already killed a run here, and both name the knob to turn in the refusal.
+
+---
+
+## 2026-09-15 — Safe autoplay, proved and applied to the no-worry-back game only
+
+**Status:** firm
+
+When a card can never be wanted in the tableau again the search plays it and
+considers nothing else at that position. This is the dominance `CLAUDE.md`
+singles out as the dangerous one, and it is the first cut in this project that
+has actually paid.
+
+**The rule, corrected for two decks.** A tableau card of rank *r* and colour
+*C* is useful in the tableau for exactly one thing: being a base for a card of
+rank *r-1* and the opposite colour. The opposite colour is two suits, and with
+two decks each suit has two foundation piles, so **all four** must have passed
+*r-1*. The familiar single-deck rule checks two piles; ported unchanged it
+would call a black five safe while a second red four was still in play.
+`a_card_is_unsafe_until_all_four_opposite_piles_pass_it` pins that exact case.
+Aces and twos are always safe: nothing stacks on an ace, and the only card that
+stacks on a two is an ace, which never needs a base either — an ace off the
+foundations implies a free slot of its suit, since only that suit's two aces
+can occupy its two slots.
+
+**The proof.** Let `L` win from this position and let `X` be the safe card, on
+top of its column. Winning puts every card up, so `L` plays `X` up at some
+point. Play `X` up first and follow `L` with that play removed. No move of `L`
+can put a card on `X`: the only candidates are the four opposite-colour cards
+of rank *r-1*, all on foundations, and with worry-back off they never come
+back. A move of `L` carrying a run that includes `X` carries `X` plus cards
+*below* it, so dropping `X` leaves the run's bottom card unchanged and the
+destination still accepts it; a move carrying `X` alone simply disappears.
+Exposing the card under `X` earlier only adds options. So the reordered line
+wins, and restricting the position to that one move cannot lose a win.
+
+**The gate is the proof, not caution.** With worry-back legal the four cards
+the condition checks can come back down and want `X` underneath them. The
+condition is a claim about the future, and worry-back makes it false.
+
+**The repair that does not work, recorded so it is not re-derived.** Worry-back
+looks like it should make this *easier*: play the card up, and worry it back if
+it is ever wanted. That argument is circular under a transposition table. It
+justifies the restricted position `P'` by appealing to a path from `P'` back to
+`P` — but `P` has been expanded with only the forced move in it, so the table
+skips it and the search never reaches `P`'s alternatives from `P'` either. The
+win the argument promises is one the search can no longer find. This is the
+`CLAUDE.md` warning wearing the costume of a fix, and it is presumably close to
+what Solvitaire's authors hit twice.
+
+**Measured**, 50 Gypsy deals, worry-back off, 5M budget, table 512 MiB. Raw
+results in `docs/results/gypsy-nwb-5M-50deals-{baseline,autoplay}.jsonl`.
+
+| | Solvable | Unknown |
+|---|---|---|
+| without | 9 | 41 |
+| with | **12** | 38 |
+
+No verdict was contradicted and none regressed. On the nine deals decided in
+both arms, nodes fell **41.5%** in total — deal 30 by 65.6%, deal 21 by 54.5%,
+deal 9 by 35.7%, and two deals not at all.
+
+**Why two deals did not move, and it is not a fault.** `ToFoundation` was
+already first in the move ordering, so on the first descent the search was
+playing these cards anyway; forcing them changes nothing until something
+backtracks. The rule fires on about 3% of expansions — 9,741 of 300,000 on
+deal 0 — and the whole gain is in the alternatives it stops the search
+revisiting. A deal solved with little backtracking sees no change at all.
+
+**What it does not do.** Nothing for the full game. The headline figure this
+project exists to produce is the worry-back one, and it still has no dominance.
+It helps the no-worry-back figure, which `DESIGN.md` has shipping first, and
+which is half of the worry-back delta.
+
+**The validation is weaker than `DESIGN.md` asks for, and that is worth
+stating.** Dominances are supposed to be checked on the Klondike deal set, but
+Klondike here is the published worry-back variant, so this dominance never
+fires in it. The check above is before-and-after agreement on Gypsy deals,
+where only nine of fifty resolve — far less signal than Klondike's sixty
+percent. Giving Klondike a no-worry-back mode would restore the teeth and is
+the obvious follow-up; it is not folded in here because it needs the rule
+implemented a second time, for one deck and four foundations, and that is its
+own PR with its own proof.
