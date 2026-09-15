@@ -13,7 +13,8 @@ Only source was reachable from this environment — arxiv, JAIR, Dagstuhl and
 Semantic Scholar are all blocked by the egress proxy, so everything below is
 read out of code and repo documentation rather than the papers themselves.
 Statements attributed to Blake & Gent are quoted from those repos and should be
-checked against the paper by someone who can open it.
+checked against the paper by someone who can open it. The questions that need
+answering are written out in `literature-questions.md`, as sent to Gizmo.
 
 ## The two solvers
 
