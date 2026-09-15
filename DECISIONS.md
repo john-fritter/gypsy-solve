@@ -591,7 +591,9 @@ improves, and the published figure staying inside it is the regression test.
 
 ## 2026-09-12 — Measured: the search does not converge with budget
 
-**Status:** firm (a measurement)
+**Status:** superseded by *Re-measured: the search does converge with budget,
+far too slowly* (2026-09-14). The measurement was taken on the depth-indexed
+table and does not describe the search that replaced it.
 
 The same 50 Klondike deals, at 3M and at 12M nodes. Raw results in
 `docs/results/`.
@@ -733,3 +735,365 @@ days of compute, and it would make the project look finished when it is not.
 
 **Not a reason to delay:** the two cheap dominances. They are provable in a
 paragraph each, and Klondike is what checks them.
+
+---
+
+## 2026-09-14 — Re-measured: the search does converge with budget, far too slowly
+
+**Status:** firm (a measurement). Supersedes *Measured: the search does not
+converge with budget* (2026-09-12).
+
+That entry was taken on the depth-indexed table, which was replaced on
+2026-09-13. It reordered the build away from dominances, and it was describing
+a search that no longer exists. Re-swept on the expanded-set table: the same 50
+Klondike deals at 3M, 12M and 48M nodes, with table entries held at about four
+times the node budget at every level so that what varies between levels is the
+budget and not table pressure. Raw results in `docs/results/`, files
+`klondike-sweep-{3M,12M,48M}-50deals.jsonl`.
+
+| Budget | Table | Solvable | Unsolvable | Unknown | Bracket |
+|---|---|---|---|---|---|
+| 3M | 256 MiB | 21 | 9 | 20 (40%) | 60.9 pts |
+| 12M | 1 GiB | 23 | 10 | 17 (34%) | 55.8 pts |
+| 48M | 4 GiB | 27 | 10 | 13 (26%) | 48.4 pts |
+
+**The old conclusion was too strong.** The unknown bucket does shrink with
+budget, by a factor of about 0.81 per fourfold step — 0.850 then 0.765, so if
+anything the return is improving rather than decaying. The 2026-09-12 figure of
+two deals per fourfold step is now three, then four. Killing re-expansion did
+not just buy a one-off 18 points of coverage; it restored a real, if slow,
+exchange rate between compute and resolved deals.
+
+**The old conclusion's consequence survives anyway.** Extrapolating the 0.81
+ratio, reaching the 5% unknown gate needs about 7.7 further fourfold steps —
+roughly 4x10^4 times the budget, around 2x10^12 nodes per deal, some 60 days
+per deal at the 262k nodes/second measured here. The 1% publishing gate needs
+about 10^9 times the budget. Both are out of reach by many orders of magnitude,
+on this box or any other. So dominances remain the critical path, and the build
+order set on 2026-09-12 stands — but it stands for a corrected reason, and
+"the search does not converge" should not be repeated. It converges; the rate
+is simply nowhere near enough.
+
+**No verdict regressed.** Across all three levels and both directions, nothing
+decided at a lower budget changed at a higher one, and nothing flipped between
+solvable and unsolvable. Every unknown at every level was stopped by the node
+budget; the stack guard was never reached. The seven deals that resolved were
+six solvable and one unsolvable.
+
+**Determinism confirmed across machines.** The 3M level reproduces
+`klondike-3M-50deals-expanded-set.jsonl` exactly — all 50 seeds agree on
+verdict *and* on node count, on different hardware from the original run. The
+README's claim that a verdict is reproducible on any machine is now tested
+rather than asserted.
+
+**A warning about the one-sided check.** The 2026-09-12 entry leaned on the
+proven-unsolvable rate staying under Klondike's true 18.06%, since an
+exhaustive refutation cannot be inflated by a weak search. It was 12.0% then.
+It is now 20.0%, above the ceiling. This is not evidence of over-refutation —
+at n=50, 10/50 has a Wilson 95% interval of [11.2%, 33.0%] and the ceiling sits
+comfortably inside — but the margin the check used to have is gone, and at
+n=50 it can no longer discriminate at all. It only becomes a real test at
+n=1000, where a sustained 20% would put the ceiling at the very edge of the
+interval. Another reason the validation set has to grow, and growing it needs
+the parallel runner.
+
+**Rejected:** raising the budget as the route to the gate, which is what this
+sweep was run to test. Also rejected: reading the improved exchange rate as a
+reason to defer dominances again. Four orders of magnitude is not a tuning
+problem.
+
+---
+
+## 2026-09-14 — The two cheap dominances are dead: unsound gated wrong, redundant gated right
+
+**Status:** firm
+
+Neither *interchangeable empty destinations* nor *whole-column-onto-empty*
+goes in. Both were listed in `DESIGN.md` as provable in a paragraph and
+unconditional. Both are wrong as stated, and worthless once corrected.
+
+**The argument they rest on.** Each says a move only relabels the position:
+with two empty columns it does not matter which one a card goes to, and moving
+a whole face-up column onto an empty column just exchanges two columns. The
+first half is true. `core/src/state.rs` now pins it — the move's result is
+exactly the position before it with the two columns swapped.
+
+**Why unconditional is unsound.** The stock deals card *i* to column *i*,
+empty columns included. So while cards remain undealt the columns are not
+interchangeable: exchanging two of them changes which card lands on the run
+and which lands on the empty space. The second new test is the concrete case —
+an eight alone in column 0 with the stock about to deal it a king, versus the
+same eight moved to column 1 where the stock deals it a seven. One buries the
+eight, the other builds a run of two, and no permutation of the columns turns
+either position into the other. This is the same gate recorded on 2026-09-11
+for canonicalisation, and it applies here for the same reason. A move that
+reaches a genuinely different position cannot be dropped without an argument,
+and the offered argument is the one that just failed.
+
+**Why gated is redundant.** Gate it on an empty stock and the argument holds —
+nothing addresses a column by index again, so the exchange really is a
+relabelling. But `Zobrist::key` folds the columns order-insensitively under
+exactly that condition, so the child's key *is* the parent's key, and the
+parent is in the table because the search is standing on it. The table already
+skips the child. The dominance removes nothing the search was going to do.
+
+**Measured**, both cuts implemented and then reverted. 50 Klondike deals, 3M
+budget: **node counts identical on every deal**, to the node, and no verdict
+changed. That is the redundancy, observed rather than argued. Throughput,
+measured single-threaded and interleaved to keep worker contention out of it:
+Klondike about 4% faster (1.5% to 6% across deals), Gypsy about 1% slower
+(0.4% to 2%). Klondike gains more because there the cut needs no gate —
+nothing ever addresses a pile from outside, so its key sorts piles throughout.
+
+A first pass measured 11% on Klondike and 5.8% on Gypsy. Both were four
+workers on four cores and both were mostly contention. The interleaved
+single-threaded numbers are the ones above.
+
+**Rejected:** shipping the cut for the Klondike gain. It is a throughput
+tweak, not a dominance, it is a small loss on the game that actually gets
+published, and `CLAUDE.md` puts correctness ahead of speed until validation
+passes. Carrying a rule that must be re-proved whenever the key changes, in
+exchange for nothing measurable, is the complexity that file says to resist.
+
+**What this costs the plan.** `DESIGN.md`'s dominance list had three entries
+and now has one: safe autoplay, the dangerous one. The two that were meant to
+be easy wins and to warm up the regression harness were neither. So the route
+from a 26% unknown bucket to the 5% gate now runs entirely through safe
+autoplay, or through something that is not a dominance at all. That is worth
+knowing before the harness work rather than after.
+
+**What it was worth anyway.** The proof obligation in `CLAUDE.md` did exactly
+what it is there for: two inherited-looking rules, both stated confidently in
+the design document, both wrong. Had either gone in ungated it would have
+pruned winning lines, and the only symptom would have been a Gypsy winnability
+figure that came out slightly too low — with no test failing and nothing to
+notice.
+
+---
+
+## 2026-09-15 — The table probes; unconditional replacement was thrashing
+
+**Status:** firm. Amends *The table is a set of expanded positions, with no
+depth* (2026-09-13), which stands except for one sentence.
+
+That entry said eviction "costs a re-expansion and nothing else". It does not.
+Two keys that share a slot evict each other, and when both sit on a path the
+search walks often they do it indefinitely: every eviction causes a
+re-expansion, and every re-expansion causes the reverse eviction. The table is
+now open-addressed, probing eight slots forward from the home slot, so the
+second key gets a place of its own.
+
+**How it was found.** Not by looking for it. A Gypsy run reported
+`table_filled` of 265,363 after expanding two million positions, against
+1.9 million for the deal beside it. Expansion only happens on a table miss, so
+the gap could not be explained by anything benign.
+
+**Measured before the fix**, 3M node budget, instrumented:
+
+| Deal | distinct positions found | re-expansions |
+|---|---|---|
+| Gypsy 2 | 266,385, then flat | 2,733,615 — 91% of the budget |
+| Klondike 3 | 2,046,484 | 953,516 — 32% |
+| Klondike 1 | 2,966,919 | 33,081 — 1% |
+
+Gypsy deal 2 is the shape of the bug: it stopped finding new positions after
+about 266,000 of them and spent the rest of its budget walking the same region,
+then reported `unknown` for want of a budget it was mostly wasting. Whether a
+deal suffered was luck — which keys collided, and whether they sat anywhere hot.
+
+The hash was never at fault. Those 266,385 keys collide 1,022 times in
+33.5 million slots, against a birthday expectation of about 1,057. It was the
+replacement policy alone.
+
+**After the fix** the same two deals re-expand 0 and 7 positions out of three
+million.
+
+**The scoreboard**, 50 Klondike deals, table entries at ~4x the budget as
+before. Raw results in `docs/results/klondike-probe-*.jsonl`.
+
+| Budget | Direct-mapped | Probing |
+|---|---|---|
+| 3M | 21 / 9 / 20 unknown (40%) | 24 / 9 / **17** (34%) |
+| 12M | 23 / 10 / 17 (34%) | 26 / 10 / **14** (28%) |
+| 48M | 27 / 10 / 13 (26%) | 29 / 10 / **11** (22%) |
+
+No verdict was contradicted at any level and none regressed to `unknown`.
+Every deal that moved moved from `unknown` to decided, and all seven that
+moved were wins — consistent with a search that was missing wins because it
+never got deep enough, which is what the thrashing did.
+
+**Keep it in proportion.** Three deals at every level, worth about one
+fourfold budget step, and the slope is unchanged: the unknown bucket still
+falls by 0.804 per 4x step against 0.806 before. The curve moved down, not
+round. Reaching the 5% gate from 11 unknown still needs about 6.8 further
+fourfold steps, roughly 10^4 times the budget. This was a real bug and fixing
+it was necessary; it is not a route to the gate.
+
+**A subtlety worth the line it cost.** When the whole probe window belongs to
+other keys the new key must be displaced *inside* the window. The first
+version wrote it one slot past, where `contains` never looks, so every
+displaced key was re-expanded on every visit — which made Klondike deal 1
+thirty times worse than the bug being fixed. `a_displaced_key_is_still_found`
+pins it.
+
+**Consequence for the batch runner, and it contradicts `DESIGN.md`.** Peak
+resident memory is no longer approximately the table size. The search now
+descends instead of thrashing, so far more frames stay live:
+
+| Run | Table | Peak RSS | Over table |
+|---|---|---|---|
+| Klondike 3, 3M | 256 MiB | 362 MiB | 107 MiB |
+| Klondike 3, 12M | 1024 MiB | 1437 MiB | 413 MiB |
+
+The excess is bounded by `max_depth` — 100,000 frames at roughly 4 KiB each,
+so it saturates near 400 MiB — but it is not negligible, and it killed the
+first 48M run outright: three workers at 4 GiB of table each went over the box
+and the kernel took them. `DESIGN.md` sizes fritter.lol at four workers with
+about 4.9 GiB available, which now means four times a table *plus* up to four
+times a stack. Workers must be sized as `table + stack allowance`, and
+`max_depth` is a memory knob as well as the stack guard the 2026-09-13 entry
+called it.
+
+**Rejected:** a larger table. It does not touch the mechanism — the colliding
+pairs are as likely at any size, and Gypsy deal 2 was thrashing in a table 1%
+full. Also rejected: N-way set association, which would work, for being more
+machinery than probing needs at these load factors.
+
+---
+
+## 2026-09-15 — The batch runner is resumable by seed, and refuses runs that will not fit
+
+**Status:** firm
+
+`gypsy batch` solves many deals with bounded concurrency and appends one JSON
+object per deal as that deal finishes. It is generic over the `Game` trait for
+the same reason the search is: the runner that publishes the Gypsy numbers has
+to be the runner Klondike validated, so `--game klondike` is the same code
+path and a 1,000-deal validation set is the same command.
+
+**Records are written and flushed per deal**, not buffered to the end. A run
+killed at hour six keeps everything it proved in the first six.
+
+**Resume is by seed, read back out of the output file.** No separate state
+file and no checkpoint format: the results *are* the checkpoint, so they cannot
+disagree with one. `--resume` skips every seed already recorded; without it,
+starting onto a non-empty file is refused rather than appended to or clobbered.
+
+**A torn final record is truncated on resume**, and this is the one piece of
+real machinery here. A kill mid-write leaves a record with no newline after
+it. Appending to that file runs the next record onto the end of the broken one,
+which destroys a *complete* result as well as the torn one — and because the
+resume scan counts the good record as done, its deal then goes silently missing
+from the batch. That is precisely the failure a resumable runner exists to
+prevent, and it was in the first version until a test with a deliberately torn
+file caught it. Truncating back to the last whole line costs the one deal that
+was genuinely interrupted.
+
+**A worker is charged for its stack as well as its table.** The run refuses to
+start when workers times (table + stack) exceeds `MemAvailable`. Before the
+probing table landed earlier today the stack term would have been noise; now
+the search descends instead of thrashing and a 12M-node Klondike solve ran
+413 MiB over its table. The estimate is `max_depth` frames at about four KiB,
+so roughly 390 MiB at the default depth. `DESIGN.md`'s "four workers on
+fritter.lol" needs re-reading with that in mind: four workers at 1 GiB of table
+each want about 5.5 GiB, and the box had about 4.9 GiB available.
+
+**Free space is checked as the run goes**, not only at the start, and dropping
+below `--min-free-mib` stops the run cleanly with everything so far recorded
+and resumable. A long run can fill a disk that was comfortable when it began,
+and `DESIGN.md` records that root was already 96% full.
+
+**A win that does not replay stops the whole run.** The solver returns that as
+an error rather than a verdict, and it is the one failure that must never reach
+a results file and be summarised into a number.
+
+**Rows land in completion order, not seed order.** Ordering them would mean
+holding results back, which is the opposite of the point. Anything that cares
+sorts, and the analysis script already does.
+
+**Rejected:** a checkpoint or manifest file alongside the results, which is a
+second source of truth that can disagree with the first. Also rejected:
+`--force` escapes on the two guards. Both guards fire on conditions that have
+already killed a run here, and both name the knob to turn in the refusal.
+
+---
+
+## 2026-09-15 — Safe autoplay, proved and applied to the no-worry-back game only
+
+**Status:** firm
+
+When a card can never be wanted in the tableau again the search plays it and
+considers nothing else at that position. This is the dominance `CLAUDE.md`
+singles out as the dangerous one, and it is the first cut in this project that
+has actually paid.
+
+**The rule, corrected for two decks.** A tableau card of rank *r* and colour
+*C* is useful in the tableau for exactly one thing: being a base for a card of
+rank *r-1* and the opposite colour. The opposite colour is two suits, and with
+two decks each suit has two foundation piles, so **all four** must have passed
+*r-1*. The familiar single-deck rule checks two piles; ported unchanged it
+would call a black five safe while a second red four was still in play.
+`a_card_is_unsafe_until_all_four_opposite_piles_pass_it` pins that exact case.
+Aces and twos are always safe: nothing stacks on an ace, and the only card that
+stacks on a two is an ace, which never needs a base either — an ace off the
+foundations implies a free slot of its suit, since only that suit's two aces
+can occupy its two slots.
+
+**The proof.** Let `L` win from this position and let `X` be the safe card, on
+top of its column. Winning puts every card up, so `L` plays `X` up at some
+point. Play `X` up first and follow `L` with that play removed. No move of `L`
+can put a card on `X`: the only candidates are the four opposite-colour cards
+of rank *r-1*, all on foundations, and with worry-back off they never come
+back. A move of `L` carrying a run that includes `X` carries `X` plus cards
+*below* it, so dropping `X` leaves the run's bottom card unchanged and the
+destination still accepts it; a move carrying `X` alone simply disappears.
+Exposing the card under `X` earlier only adds options. So the reordered line
+wins, and restricting the position to that one move cannot lose a win.
+
+**The gate is the proof, not caution.** With worry-back legal the four cards
+the condition checks can come back down and want `X` underneath them. The
+condition is a claim about the future, and worry-back makes it false.
+
+**The repair that does not work, recorded so it is not re-derived.** Worry-back
+looks like it should make this *easier*: play the card up, and worry it back if
+it is ever wanted. That argument is circular under a transposition table. It
+justifies the restricted position `P'` by appealing to a path from `P'` back to
+`P` — but `P` has been expanded with only the forced move in it, so the table
+skips it and the search never reaches `P`'s alternatives from `P'` either. The
+win the argument promises is one the search can no longer find. This is the
+`CLAUDE.md` warning wearing the costume of a fix, and it is presumably close to
+what Solvitaire's authors hit twice.
+
+**Measured**, 50 Gypsy deals, worry-back off, 5M budget, table 512 MiB. Raw
+results in `docs/results/gypsy-nwb-5M-50deals-{baseline,autoplay}.jsonl`.
+
+| | Solvable | Unknown |
+|---|---|---|
+| without | 9 | 41 |
+| with | **12** | 38 |
+
+No verdict was contradicted and none regressed. On the nine deals decided in
+both arms, nodes fell **41.5%** in total — deal 30 by 65.6%, deal 21 by 54.5%,
+deal 9 by 35.7%, and two deals not at all.
+
+**Why two deals did not move, and it is not a fault.** `ToFoundation` was
+already first in the move ordering, so on the first descent the search was
+playing these cards anyway; forcing them changes nothing until something
+backtracks. The rule fires on about 3% of expansions — 9,741 of 300,000 on
+deal 0 — and the whole gain is in the alternatives it stops the search
+revisiting. A deal solved with little backtracking sees no change at all.
+
+**What it does not do.** Nothing for the full game. The headline figure this
+project exists to produce is the worry-back one, and it still has no dominance.
+It helps the no-worry-back figure, which `DESIGN.md` has shipping first, and
+which is half of the worry-back delta.
+
+**The validation is weaker than `DESIGN.md` asks for, and that is worth
+stating.** Dominances are supposed to be checked on the Klondike deal set, but
+Klondike here is the published worry-back variant, so this dominance never
+fires in it. The check above is before-and-after agreement on Gypsy deals,
+where only nine of fifty resolve — far less signal than Klondike's sixty
+percent. Giving Klondike a no-worry-back mode would restore the teeth and is
+the obvious follow-up; it is not folded in here because it needs the rule
+implemented a second time, for one deck and four foundations, and that is its
+own PR with its own proof.

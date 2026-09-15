@@ -5,6 +5,8 @@ use std::fs;
 use std::io::{self, Read, Write};
 use std::process::ExitCode;
 
+mod batch;
+
 use clap::{Args, Parser, Subcommand};
 use gypsy_core::{parse_move_list, Move, MoveOptions, State};
 use gypsy_solver::{solve, Config, Gypsy, Limit, Report, Verdict};
@@ -29,6 +31,8 @@ enum Command {
     Solve(SolveArgs),
     /// Solve Klondike deals, to validate the solver against a known figure.
     Klondike(KlondikeArgs),
+    /// Solve many deals in parallel, resumably, writing one record each.
+    Batch(batch::BatchArgs),
 }
 
 #[derive(Args)]
@@ -207,6 +211,7 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
                 out.flush()?;
             }
         }
+        Command::Batch(args) => batch::run(args)?,
         Command::Solve(args) => {
             let config = Config {
                 node_budget: args.budget,

@@ -29,8 +29,8 @@
 
 use gypsy_core::card::{RANKS, SUITS};
 use gypsy_core::rng::SplitMix64;
-use gypsy_core::state::{COLUMNS, DECK_SIZE, STOCK_AT_DEAL};
-use gypsy_core::{Card, Move, MoveOptions, State};
+use gypsy_core::state::{foundation_slots, COLUMNS, DECK_SIZE, STOCK_AT_DEAL};
+use gypsy_core::{Card, Move, MoveOptions, State, Suit};
 
 use crate::game::Game;
 
@@ -149,13 +149,93 @@ impl Gypsy {
     }
 }
 
+/// True when no card can ever want to sit on this one again.
+///
+/// A tableau card of rank *r* and colour *C* is useful in the tableau for
+/// exactly one thing: being a base for a card of rank *r-1* and the opposite
+/// colour. With two decks the opposite colour is two suits and each suit has
+/// two foundation piles, so all **four** of those piles must have passed
+/// *r-1* before nothing can want this card. The single-deck rule checks two
+/// piles and would be wrong here.
+///
+/// Aces and twos are always safe. Nothing stacks on an ace, so no ace ever
+/// needs a base; and the only card that stacks on a two is an ace, which never
+/// needs one either — an ace off the foundations implies a free slot of its
+/// suit, since both slots of a suit can only be occupied by that suit's two
+/// aces.
+fn never_wanted_in_the_tableau(state: &State, card: Card) -> bool {
+    if card.rank() <= 2 {
+        return true;
+    }
+    let wanted = card.rank() - 1;
+    Suit::ALL
+        .iter()
+        .filter(|suit| suit.is_red() != card.is_red())
+        .flat_map(|&suit| foundation_slots(suit))
+        .all(|slot| state.foundations[slot as usize] >= wanted)
+}
+
+/// The first safe foundation play in this position, if there is one.
+fn safe_autoplay(state: &State) -> Option<Move> {
+    state.columns.iter().enumerate().find_map(|(from, column)| {
+        let card = column.top()?;
+        let foundation = state.foundation_target(card)?;
+        never_wanted_in_the_tableau(state, card).then_some(Move::ToFoundation {
+            from: from as u8,
+            foundation,
+        })
+    })
+}
+
 impl Game for Gypsy {
     type Position = State;
     type Action = Move;
 
-    /// Rules-legal moves, reordered. Nothing is dropped: reordering cannot
-    /// cost a solution, whereas dropping a move needs an argument.
+    /// Rules-legal moves, reordered, with safe autoplay applied in the game
+    /// where it is provable.
+    ///
+    /// # Safe autoplay, and why it is gated on worry-back
+    ///
+    /// When a card is safe by [`never_wanted_in_the_tableau`] the search may
+    /// play it and consider nothing else at this position.
+    ///
+    /// **The argument, with worry-back off.** Let `L` be a winning line from
+    /// this position and let `X` be the safe card, on top of its column.
+    /// Winning puts every card on a foundation, so `L` plays `X` up at some
+    /// point. Build `L'`: play `X` up first, then follow `L` with that play
+    /// removed. Every move of `L'` is legal. No move of `L` can put a card on
+    /// `X`, because the only cards that could are the four opposite-colour
+    /// cards of rank one lower, all of which are already on foundations and —
+    /// **this is the whole gate** — with worry-back off can never leave them.
+    /// A move of `L` that carries a run including `X` carries `X` plus cards
+    /// below it; drop `X` from that run and the move still works, because the
+    /// destination only ever tests the run's bottom card, which is unchanged.
+    /// So `L'` wins, and restricting this position to the single move `X` up
+    /// cannot lose a win.
+    ///
+    /// **Why worry-back breaks it.** The gate is not caution, it is the load
+    /// -bearing step. With worry-back legal, "on a foundation" stops meaning
+    /// "out of the tableau for good": the four cards the condition checks can
+    /// come back down, and one of them may then want `X` underneath it. The
+    /// safety condition is a claim about the future and worry-back makes it
+    /// false.
+    ///
+    /// **And the tempting repair does not work.** It looks like worry-back
+    /// should make this *easier* — play `X` up, and if it is ever wanted,
+    /// worry it straight back. That argument is circular under a
+    /// transposition table. It justifies the restricted position `P'` by
+    /// appealing to a path from `P'` back to `P`, but `P` has been expanded
+    /// with only the forced move in it, so the table skips it and the search
+    /// never reaches `P`'s alternatives from `P'` either. The win the argument
+    /// promises is one the search can no longer find. This is the shape of
+    /// error `CLAUDE.md` warns about and Solvitaire's authors hit twice.
     fn legal_actions(&self, position: &State) -> Vec<Move> {
+        if !self.options.worry_back {
+            if let Some(autoplay) = safe_autoplay(position) {
+                return vec![autoplay];
+            }
+        }
+
         let mut moves = position.legal_moves(self.options);
         moves.sort_by_key(|mv| match *mv {
             Move::ToFoundation { .. } => 0u8,
@@ -195,7 +275,86 @@ impl Game for Gypsy {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use gypsy_core::state::FOUNDATIONS;
     use gypsy_core::Move;
+
+    /// Nothing stacks on an ace, and only an ace stacks on a two.
+    #[test]
+    fn aces_and_twos_never_need_a_base() {
+        let mut state = State::deal(3);
+        state.foundations = [0; FOUNDATIONS];
+        assert!(never_wanted_in_the_tableau(
+            &state,
+            Card::new(Suit::Hearts, 1)
+        ));
+        assert!(never_wanted_in_the_tableau(
+            &state,
+            Card::new(Suit::Hearts, 2)
+        ));
+        assert!(!never_wanted_in_the_tableau(
+            &state,
+            Card::new(Suit::Hearts, 3)
+        ));
+    }
+
+    /// The two-deck correction, and the one a ported single-deck rule gets
+    /// wrong. Hearts are slots 2 and 3, diamonds 6 and 7. Checking one pile
+    /// per opposite suit — slots 2 and 6, both past the four — would call this
+    /// safe while a second four of diamonds is still in play and may still
+    /// want a black five under it.
+    #[test]
+    fn a_card_is_unsafe_until_all_four_opposite_piles_pass_it() {
+        let mut state = State::deal(3);
+        let black_five = Card::new(Suit::Spades, 5);
+
+        state.foundations = [0, 0, 4, 4, 0, 0, 4, 3];
+        assert!(
+            !never_wanted_in_the_tableau(&state, black_five),
+            "one red pile is still short, so a red four can still want this"
+        );
+
+        state.foundations[7] = 4;
+        assert!(never_wanted_in_the_tableau(&state, black_five));
+    }
+
+    /// Builds a position whose column 0 top card is both playable and safe.
+    fn with_a_safe_autoplay(seed: u64) -> State {
+        let mut state = State::deal(seed);
+        let top = state.columns[0].top().expect("a dealt column has cards");
+        let mut foundations = [0u8; FOUNDATIONS];
+        foundations[foundation_slots(top.suit())[0] as usize] = top.rank() - 1;
+        for suit in Suit::ALL
+            .iter()
+            .filter(|suit| suit.is_red() != top.is_red())
+        {
+            for slot in foundation_slots(*suit) {
+                foundations[slot as usize] = top.rank() - 1;
+            }
+        }
+        state.foundations = foundations;
+        state
+    }
+
+    #[test]
+    fn a_safe_card_collapses_the_position_to_one_move() {
+        let state = with_a_safe_autoplay(3);
+        let actions = Gypsy::new(MoveOptions::NO_WORRY_BACK).legal_actions(&state);
+        assert_eq!(actions.len(), 1, "everything else is dominated");
+        assert!(matches!(actions[0], Move::ToFoundation { .. }));
+    }
+
+    /// The gate. With worry-back legal the four piles the rule checks can
+    /// send their cards back down, so the rule proves nothing and the search
+    /// keeps every move.
+    #[test]
+    fn safe_autoplay_is_suppressed_when_worry_back_is_legal() {
+        let state = with_a_safe_autoplay(3);
+        let actions = Gypsy::new(MoveOptions::ALL).legal_actions(&state);
+        assert!(
+            actions.len() > 1,
+            "the full game keeps its alternatives, got {actions:?}"
+        );
+    }
 
     #[test]
     fn the_same_position_always_hashes_the_same() {

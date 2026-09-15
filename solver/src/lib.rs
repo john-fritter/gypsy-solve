@@ -6,10 +6,12 @@
 //! a second implementation validated separately would prove nothing about the
 //! first.
 //!
-//! No dominances are applied to either game. Every cut is either a
-//! transposition — the same position, reached twice — or a limit, reported
-//! honestly. That makes it slow, and makes it the baseline that later cuts get
-//! measured against.
+//! Cuts are conservative and each one is argued where it is made. Most are
+//! transpositions — the same position, reached twice — or a limit, reported
+//! honestly. The one dominance is safe autoplay in [`Gypsy`], and it applies
+//! only when worry-back is off, because that is the only case where it is
+//! provable; see the note on `Gypsy::legal_actions`. Klondike has none, which
+//! is why it cannot check that one.
 
 mod game;
 mod gypsy;

@@ -453,6 +453,81 @@ mod tests {
         Card::new(suit, rank)
     }
 
+    /// `DESIGN.md` proposed dropping this move as "a relabelling of the
+    /// position, and nothing more". The first half of that is true: moving a
+    /// whole face-up column onto an empty one exchanges the two columns and
+    /// does nothing else.
+    #[test]
+    fn a_whole_face_up_column_onto_an_empty_one_exchanges_the_two_columns() {
+        let run = [card(Suit::Spades, 8), card(Suit::Hearts, 7)];
+        let mut columns: [(usize, &[Card]); COLUMNS] = [(0, &[]); COLUMNS];
+        columns[0] = (0, &run);
+        let before = position(columns, [0; FOUNDATIONS]);
+
+        let mut after = before.clone();
+        after
+            .apply(Move::Tableau {
+                from: 0,
+                to: 1,
+                count: 2,
+            })
+            .expect("a face-up run may move onto an empty column");
+
+        let mut exchanged = before.clone();
+        exchanged.columns.swap(0, 1);
+        assert_eq!(after, exchanged);
+    }
+
+    /// And the second half is false while the stock holds cards, which is what
+    /// makes the unconditional dominance unsound. The stock deals card *i* to
+    /// column *i*, so exchanging two columns changes which card lands on the
+    /// run and which lands on the empty space. Here the move is the difference
+    /// between building a run and burying it.
+    #[test]
+    fn exchanging_two_columns_changes_what_the_stock_deals_onto_them() {
+        let alone = [card(Suit::Spades, 8)];
+        let mut columns: [(usize, &[Card]); COLUMNS] = [(0, &[]); COLUMNS];
+        columns[0] = (0, &alone);
+
+        // Column 0 receives the king, column 1 the seven.
+        let stock = vec![card(Suit::Spades, 13), card(Suit::Hearts, 7)];
+
+        let mut stay = position(columns, [0; FOUNDATIONS]);
+        stay.stock = stock.clone();
+        let mut exchange = stay.clone();
+        exchange
+            .apply(Move::Tableau {
+                from: 0,
+                to: 1,
+                count: 1,
+            })
+            .expect("a face-up run may move onto an empty column");
+
+        stay.apply(Move::Stock).expect("the stock is not empty");
+        exchange.apply(Move::Stock).expect("the stock is not empty");
+
+        // Staying buries the eight under a king that does not stack on it.
+        assert_eq!(stay.columns[0].movable_run(), 1);
+        // Exchanging puts the seven on the eight and builds a run of two.
+        assert_eq!(exchange.columns[1].movable_run(), 2);
+
+        // So the two positions are not each other relabelled: no permutation
+        // of the columns turns one into the other.
+        let mut stay_shapes: Vec<Vec<Card>> = stay
+            .columns
+            .iter()
+            .map(|column| column.cards().to_vec())
+            .collect();
+        let mut exchange_shapes: Vec<Vec<Card>> = exchange
+            .columns
+            .iter()
+            .map(|column| column.cards().to_vec())
+            .collect();
+        stay_shapes.sort();
+        exchange_shapes.sort();
+        assert_ne!(stay_shapes, exchange_shapes);
+    }
+
     #[test]
     fn deck_holds_two_of_every_card() {
         let deck = State::deck(99);

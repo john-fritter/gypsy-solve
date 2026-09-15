@@ -30,6 +30,7 @@ gypsy moves  --seed 42 --moves "T7>F2"
 gypsy replay --seed 42 --moves-file line.txt --step
 gypsy solve  --seed 42 --budget 10000000 --trace line.txt
 gypsy klondike --seed 0 --deals 100 --json
+gypsy batch  --game klondike --deals 1000 --workers 3 --out results.jsonl
 ```
 
 `--moves-file -` reads from stdin. In a move file, `#` starts a comment.
@@ -53,8 +54,29 @@ hitting it means something is wrong rather than that it needs raising. `--json` 
 flat object per deal; `--trace PATH` writes the winning line in a form
 `gypsy replay --moves-file PATH --step` will walk.
 
-The solver applies no dominances. It is the baseline that later cuts get
-measured against, and on a real Gypsy deal it mostly returns `unknown`.
+The solver applies one dominance, and only in the restricted game: with
+`--no-worry-back` a card that can never be wanted in the tableau again is
+played up and nothing else is considered at that position. It is gated because
+the proof is — worry-back lets the cards the rule checks come back down, and
+then the rule proves nothing. The full game has no dominance at all, and on a
+real Gypsy deal it mostly returns `unknown`.
+
+## Batch runs
+
+`gypsy batch` solves many deals at once and is what the long runs use. It
+appends one JSON object per deal as that deal finishes, so a run that is killed
+keeps everything it had already proved, and `--resume` skips what is already
+recorded — the answer to a kill is to run the same command again. A record left
+torn by a kill is dropped on resume rather than appended to, which would
+destroy the complete record after it.
+
+It refuses to start when the run would not fit. Each worker holds its own
+transposition table *and* its own search stack, and the stack is not small: at
+the default `--max-depth` it can reach around 390 MiB, so four workers at 1 GiB
+of table each want about 5.5 GiB rather than 4. `--min-free-mib` does the same
+job for disk, checked as the run goes rather than only at the start.
+
+Rows land in completion order, not seed order. Anything that cares sorts.
 
 ## Validation
 
