@@ -1202,3 +1202,97 @@ has committed to.
 **What this does not do.** Nothing for the full game. The headline figure is
 the worry-back one and it still has no dominance at all. This closes the
 validation hole; it does not move the number.
+
+## 2026-09-15 — Measured: Klondike wins almost never need worry-back
+
+**Status:** firm as a measurement of Klondike. What it points at for the search
+is provisional until the same measurement exists for Gypsy.
+
+`DESIGN.md` sanctions capping the number of worry-backs as a valid lower bound
+if the full search proves too expensive. Before building a cap, the cheap
+question is whether one would bind at all: how much worry-back do the wins we
+already have actually contain?
+
+**Method.** `gypsy klondike --json` now emits the winning line, the way
+`gypsy solve --json` always has. The 29 deals that `klondike-probe-48M-50deals`
+proved solvable were re-solved at the same budget and their lines counted.
+Both games print a worry-back as `F<slot>>T<pile>`, so one counter serves both.
+Raw lines in `docs/results/klondike-full-48M-29wins-lines.jsonl`.
+
+27 of the 29 reproduced the recorded run exactly, node for node. Seeds 3 and 16
+were killed by the memory cgroup at the 3 GiB table the original run used and
+were re-run at 1 GiB; they expanded 705 and 6 more nodes — table displacement,
+exactly what `table.rs` predicts — and returned identical line lengths.
+
+**How much worry-back a winning line contains:**
+
+| Worry-backs | Lines | Cumulative |
+|---|---|---|
+| 0 | 17 | 58.6% |
+| 1 | 7 | 82.8% |
+| 2 | 1 | 86.2% |
+| 3 | 1 | 89.7% |
+| 4 | 2 | 96.6% |
+| 42 | 1 | 100% |
+
+**This is a measurement of the search, not of the game**, and seed 38 is the
+proof of that. Its line uses 42 worry-backs across 1,351 moves — and the
+restricted arm solves the same deal outright. All 42 were the search wandering.
+Move ordering puts worry-back second to last, so these counts are biased low;
+the bias runs the right way for a cap, because a line using *k* worry-backs
+witnesses that a win exists within *k*. It says nothing about what was needed.
+
+**The stronger result: 28 of the 29 wins are winnable with worry-back off, and
+that is proven rather than inferred.** Two independent witnesses, either of
+which settles a deal:
+
+- the restricted arm returns `solvable` — 26 deals;
+- the full-arm line contains no worry-back at all — which adds seeds 3 and 47.
+
+The second witness is worth having because the restricted arm ran at 3M and the
+full arm at 48M, so a restricted `unknown` is often just a deal that could not
+be afforded. Seeds 3, 16 and 47 are precisely the three most expensive wins in
+the set — 22.3M, 13.4M and 29.8M nodes — and two of them have zero-worry-back
+lines. It is sound because `NO_WORRY_BACK` suppresses the foundation-to-pile
+actions and nothing else, pinned by
+`no_worry_back_suppresses_only_the_foundation_to_pile_actions`, so a line using
+none is already a line of the restricted game.
+
+That leaves **seed 16 alone** unestablished, and its line uses exactly one
+worry-back. Across fifty Klondike deals, worry-back is not known to have changed
+a single verdict.
+
+**What this does not say.** Klondike is not Gypsy. Gypsy has eight foundations
+to Klondike's four, eight columns, no waste, a permissive any-alternating-colour
+group move, and a stock that deals onto the columns. The Gypsy worry-back delta
+is the headline figure this project exists to produce and **nothing here
+measures it.** Gypsy's delta may be large while Klondike's is near zero.
+
+**What it does say** is about the search, and it holds regardless: the published
+arm pays worry-back's branching factor at every single node, for something that
+across fifty deals changed at most one verdict. That is the wrong price, and it
+is the first concrete reason to think the full arm's 22% unknown bucket is
+partly self-inflicted rather than intrinsic.
+
+**Consequence: a capped arm is worth building, and one subtlety has to be
+settled first.** Worry-backs spent is a property of the *path*, not of the
+position. Under a table that stores positions, a deal reached with the cap
+exhausted is indistinguishable from the same position reached with the cap
+untouched, and whichever arrives first suppresses the other. So a capped search
+is a lower bound twice over, and **exhausting it proves only "no win within
+*k*", never `Unsolvable`.** The verdict mapping must be `Solvable` → `Solvable`,
+`Unsolvable` → `Unknown`, `Unknown` → `Unknown`. This is the same shape of error
+as the safe-autoplay repair recorded above — a claim about the path being
+checked against a table that has forgotten the path — and it is written down
+here so nobody re-derives it as a bug.
+
+**Considered, not taken:** putting worry-backs-spent into the transposition key.
+That makes the cap sound and the `Unsolvable` verdict available again, but it
+multiplies the state space by *k+1* and gives up exactly the merging the table
+exists for. Not measured, so not rejected on evidence — recorded as the
+alternative and the reason it was passed over.
+
+**Candidate for later, not a decision:** once a line has spent its cap, the rest
+of the game is exactly the restricted game, so safe autoplay is sound again from
+that point. Attractive, and subject to the same path-versus-position problem, so
+it needs its own proof rather than an appeal to this entry.

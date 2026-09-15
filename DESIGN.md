@@ -284,19 +284,50 @@ budget-exhausted.
 
 ### Where work resumes
 
-**Find a dominance that survives worry-back.** It is the only thing that moves
-the headline figure, and it is now the only dominance work left on the list:
-the two cheap rules are dead, and safe autoplay is done and properly validated.
-Unlike safe autoplay, a worry-back dominance fires in the *published* Klondike
-variant, so the existing validation set checks it with no new harness needed.
+**Measured 2026-09-15: Klondike wins almost never use worry-back.** Of the 29
+deals the 48M run proved solvable, 17 have winning lines containing no
+worry-back at all and 28 are *proven* winnable with worry-back suppressed
+entirely. One deal, seed 16, is unestablished, and its line uses a single
+worry-back. Across fifty deals worry-back is not known to have changed one
+verdict — while the published arm pays its branching factor at every node. See
+`DECISIONS.md`.
 
-Nothing on the current list is a candidate. The reordering argument that
-carries safe autoplay needs a card to be out of reach once it is up, which is
-the one thing worry-back denies, so the next rule has to be a different shape
-of argument rather than a repair of this one — or the search needs something
-that is not a dominance at all.
+That does not measure the Gypsy delta, which is the headline figure and which
+nothing in this repo has yet touched. It does say the full arm's 22% unknown
+bucket is partly self-inflicted. Two things follow, in this order:
 
-After that: the 1,000-deal Klondike validation the gate below is written
+1. **Run the Gypsy full arm at all.** Every Gypsy result here is the restricted
+   arm. Every design choice for the headline search is currently being made
+   from Klondike's shape, and Gypsy is the bigger game — its cheapest
+   restricted win costs 2,167 nodes against Klondike's 136. A 50-deal
+   diagnostic run, explicitly not a published figure, gives the verdict split,
+   the node distribution and the same worry-back count for whatever wins come
+   back. Sizing a cap from Klondike alone would be sizing it from the wrong
+   game.
+2. **Then the capped arm**, `--worry-back-limit k` swept over *k*. Sound as a
+   lower bound, which `DESIGN.md` has always permitted, with one constraint
+   settled in advance: worry-backs spent is path state and the table stores
+   positions, so an exhausted capped search proves *no win within k*, never
+   `Unsolvable`. `Unsolvable` must map to `Unknown` in that arm.
+
+**A dominance that survives worry-back** remains open and remains the only
+thing that would move the full arm without bounding it. Nothing on the current
+list is a candidate: the reordering argument that carries safe autoplay needs a
+card to be out of reach once it is up, which is the one thing worry-back
+denies, so the next rule has to be a different shape of argument rather than a
+repair of this one.
+
+**Also open, and not a dominance:** the wins in the full arm are found either
+almost instantly or at enormous cost — twelve of 29 under 500 nodes, median
+12,696, then a tail to 29.8M, while the eleven unknowns each burn 48M. That is
+the profile of a search committed to the wrong subtree near the root rather
+than one facing a graph slightly too large, and it is consistent with the 0.804
+slope. If it holds up, randomised restarts under a fixed total budget are a
+lever that is not on that curve, and they cost nothing in rigour: a restart
+phase can only turn `unknown` into `solvable`, never claim `unsolvable`. Worth
+testing on the eleven unknown deals for the price of one 48M run.
+
+After all that: the 1,000-deal Klondike validation the gate below is written
 against, which `gypsy batch` is now built for.
 
 **How a dominance gets checked**, settled 2026-09-15 and worth following
