@@ -381,17 +381,17 @@ are unproven rather than unavailable, and adopting either means extending the
 paper, with our own duplicate-card argument, exactly as our existing safe
 autoplay was proved rather than inherited.
 
-**Done 2026-09-16, and held back.** The two-deck extension is derived — each
-threshold a minimum over the suit's two slots, plus a third condition on the
-card's own suit that duplicates force and a single deck never needs — and it
-was implemented and measured. Klondike: no verdict changed at 3M or 12M, nodes
-down 32% and 20%. Gypsy: the full arm loses seed 15, the only deal it has ever
-solved by itself, which fails the bar below. The win is *not* discarded by the
-rule — the proof's own construction rewrites the recorded line into a compliant
-winning line — so the loss is the search's descent, not soundness. Reverted,
-with the derivation and the numbers in `DECISIONS.md`. Composition with the
-split-run rule is the other thing owed: the paper's compatibility theorem for
-that pair is single-deck too.
+**Done 2026-09-16, held back, and then shipped.** The two-deck extension is
+proved — each threshold a minimum over the suit's two slots, plus a third
+condition on the card's own suit that duplicate cards force and a single deck
+never needs. It was held back for a day's afternoon because it cost seed 15, a
+lucky first descent; restarts made that test meaningless and it was re-measured
+against the restart baselines. Klondike: no verdict changed at 3M or 12M, nodes
+down 32% and 20%. Gypsy under restarts: nothing contradicted or regressed, and
+the full arm gains seed 0 — solved **by itself**, 843 moves, the third deal the
+worry-back search has ever cracked without the carry. Composition with the
+split-run rule is the one thing still owed: the paper's compatibility theorem
+for that pair is single-deck too.
 
 **The rule to take first is a different one: the incomplete-pile dominance**
 (Appendix B.2), which *is* generalised past a single deck — an incomplete built

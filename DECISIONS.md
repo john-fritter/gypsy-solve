@@ -2207,3 +2207,63 @@ today for exactly one reason: it lost seed 15, a lucky descent. Under restarts
 that is no longer the test — a rule can no longer be judged by whether it
 preserves one first descent. Re-measuring it with restarts on is the obvious
 next piece of work, and it is now a fair test rather than a lottery.
+
+## 2026-09-16 — The two-deck safe-foundation rule ships, because restarts made the test fair
+
+**Status:** firm. Reverses the hold in *The two-deck safe-foundation rule:
+derived, measured, and held back* (earlier today), which stands as the record of
+why it was held and of the derivation it rests on.
+
+That entry held the rule back for one reason: it cost seed 15, the only deal the
+Gypsy full arm had ever solved by itself — and that win was a 68,592-node first
+descent on a 38,068-move line, which is luck rather than search strength.
+Restarts make that test meaningless in the right direction: **a dominance can no
+longer be judged by whether it preserves one lucky descent.** Re-measured
+against the restart baselines, the rule clears the bar it failed this morning.
+
+**Gypsy, 50 deals, both arms, restarts on.** Baselines are the recorded
+`gypsy-both-{12M-restart8,48M-restart32}` runs; the new files carry
+`-safefoundation`.
+
+| Policy | arm | without | with |
+|---|---|---|---|
+| 12M as 8 x 1.5M | restricted | 44 solvable, 6 unknown | 44, 6 |
+| 12M as 8 x 1.5M | full | 44 solvable (0 by search), 6 unknown | **45 (1 by search), 5** |
+| 48M as 32 x 1.5M | restricted | 46, 4 | 46, 4 |
+| 48M as 32 x 1.5M | full | 46 (0 by search), 4 | 46 (0 by search), 4 |
+
+**No verdict contradicted and none regressed**, at either budget, in either arm
+— seed 15 included, which is the whole point. Nodes are flat to 1.3% down. The
+restricted arm is untouched to the node, as it must be: the worry-back condition
+implies the no-worry-back one, so this rule fires only where that arm already
+forced, and a test pins exactly that.
+
+**What it bought is one deal, and the deal is the interesting part.** Seed 0, at
+12M: the **full arm solved it by itself**, 9,051,762 nodes, an 843-move line,
+found on the seventh slice — while the restricted arm leaves it unknown in the
+same run. That is the third deal the worry-back search has ever cracked without
+the carry, after 15 and 45. It is a candidate for a deal that *needs* worry-back
+and is not proof of one: the restricted arm returns `unknown`, not a refutation,
+and this deal set still proves nothing unsolvable.
+
+**Why ship for one deal.** Because it is the arm that publishes, because the
+cost is nothing measurable, and because deals the full arm cracks on its own are
+the only evidence the headline figure can ever be built from — there are three
+of them in the project's history and this rule produced one. The 2026-09-14
+precedent that killed two dominances killed them for changing *nothing*: node
+counts identical to the node. This one changes a verdict in the right direction
+and never changes one in the wrong direction.
+
+**Klondike keeps it too, and its policy is restarts off**, since restarts do
+nothing for that game and finer slices cost it refutations. The measurement
+there stands from this morning — no verdict contradicted at 3M or 12M, nodes
+down 31.8% and 20.3%, 29 of 31 lines unchanged in length — and both arms
+reproduce their recorded runs exactly under the re-applied code.
+
+**Still owed, and it is the one thing this entry does not close.** Two
+dominances that are each sound need not be sound together, and this one composes
+with the split-run rule at every position. Blake & Gent have a compatibility
+theorem for exactly this pair and it is single-deck like the rest of Appendix
+B.1. Every number above was measured with both rules on, so the evidence covers
+the pair; the argument does not. If a later run contradicts a verdict, that
+composition is where to look, after the gates.

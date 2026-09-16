@@ -66,9 +66,9 @@ winning line contains is a measurement in its own right — see
 `analysis/worry_back_usage.py`, which counts how much worry-back wins actually
 use.
 
-The solver applies two dominances, each with a proof that it cannot discard a
-winning line. Both are implemented once per game rather than shared, because
-the proofs differ.
+The solver applies three dominances, each with a proof that it cannot discard a
+winning line. All are implemented once per game rather than shared, because the
+proofs differ.
 
 **Safe autoplay, restricted game only.** With `--no-worry-back`, a card that can
 never be wanted in the tableau again is played up and nothing else is considered
@@ -77,6 +77,15 @@ checks come back down, and then it proves nothing. Gypsy checks four
 opposite-colour foundation piles because two decks give each suit two; Klondike
 checks two, and additionally excludes the waste, because playing a card off it
 re-aligns every later draw-three.
+
+**Safe foundation plays with worry-back legal**, in both games. A card whose
+opposite-colour foundations are within a rank, whose same-colour twin suit is
+within two, and — for Gypsy, where duplicate cards force it — whose own suit's
+second slot is level with the first, is played up and nothing else is
+considered. This is Keller's rule; the paper proves it for one deck and excludes
+duplicate cards in terms, so the two-deck form is proved on
+`Gypsy::legal_actions` rather than inherited. It is the first rule the *full*
+game has that forces a move.
 
 **Never split a built run to expose a dead card**, in both games. A move
 carrying part of a built run is not offered when the card it would uncover has
