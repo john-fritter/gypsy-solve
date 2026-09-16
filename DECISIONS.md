@@ -1869,25 +1869,36 @@ interval at n=50 and still unable to discriminate until n=1000. That warning
 from 2026-09-14 stands unchanged.
 
 **Gypsy, the same three levels, both arms**, table and worker counts as above.
-Raw results in `docs/results/gypsy-both-{3M,12M}-50deals-splitrun.jsonl`, with
-the recorded 5M run shown for continuity.
+Raw results in `docs/results/gypsy-both-{3M,12M,48M}-50deals-splitrun.jsonl`,
+with the recorded 5M run shown for continuity.
 
 | Budget | restricted | full | full arm's own wins |
 |---|---|---|---|
 | 3M | 25 solvable, 25 unknown | 26, 24 | 1 |
 | 5M | 28, 22 | 29, 21 | 1 |
 | 12M | 31, 19 | 31, 19 | **0** |
+| 48M | 38, 12 | 38, 12 | **0** |
 
-**The full arm still resolves nothing it is asked to search.** The zero at 12M is
-not a regression and the ones above it are not progress: under `--both-arms` the
-restricted arm goes first and its wins are carried, so the full arm only ever
-searches the deals the restricted arm failed. Seed 15 — the one deal the full
-arm has ever cracked by itself — is solved by the restricted arm at 12M, so the
-full arm never saw it. On the 19 deals it did search at 12M it spent every node
-of its budget, 228M in total, and decided none of them. A fourfold budget step
-has never yet taken a deal off that list.
+**The restricted arm converges faster than Klondike does** — 25, 19, 12 unknown
+is a factor of **0.693** per fourfold step against Klondike's 0.817 — and it
+reaches the same wall from a worse starting height, 5% needing about 390x the
+48M budget. Nothing about that is encouraging, because the restricted arm is not
+the figure this project exists to produce.
 
-**Zero Gypsy deals are proven unsolvable at any budget, in either arm.** That is
+**The full arm resolves nothing it is asked to search, at any budget.** The zeros
+are not a regression and the ones above them are not progress: under
+`--both-arms` the restricted arm goes first and its wins are carried, so the full
+arm only ever searches the deals the restricted arm failed. Seed 15 — the one
+deal the full arm has ever cracked by itself — is solved by the restricted arm
+from 12M up, so the full arm never saw it again. On the deals it did search it
+spent every node of its budget and decided none of them: 228M across 19 deals at
+12M, 576M across 12 deals at 48M. **Across a sixteenfold range of budget, the
+worry-back arm has bought exactly zero verdicts of its own.** That is the
+headline arm, and it is not on the curve this sweep measures — it has no curve.
+
+**Zero Gypsy deals are proven unsolvable at any budget, in either arm**, 48M
+included, and every unknown at every level was stopped by the budget rather than
+the stack guard. That is
 the same hole 2026-09-15 recorded: the Gypsy set cannot catch a dominance that
 discards a winning line, because it proves nothing in the direction that error
 shows up in. Klondike remains the only set with teeth.

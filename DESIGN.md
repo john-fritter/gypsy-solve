@@ -334,7 +334,14 @@ Three things follow, in this order:
    still needed, the **capped arm**,
    `--worry-back-limit k` swept over *k*, as the fallback it was always meant
    to be: if the uncapped arm still resolves nothing, a lower
-   bound is the only form the worry-back delta can take. One constraint
+   bound is the only form the worry-back delta can take. **"Still needed" was
+   answered on 2026-09-16 and the answer is yes**: swept at 3M, 12M and 48M, the
+   uncapped full arm resolved *nothing* of its own above 5M, spending its entire
+   budget on every deal the restricted arm left it — 576M nodes across 12 deals
+   at 48M, none decided. Seed 15 remains the only deal the worry-back search has
+   ever cracked by itself. The carry hides this by making the full arm's totals
+   equal the restricted arm's, which is also why the measured worry-back delta
+   is currently exactly zero. One constraint
    settled in advance — worry-backs spent is path state and the table stores
    positions, so an exhausted capped search proves *no win within k*, never
    `Unsolvable`. `Unsolvable` must map to `Unknown` in that arm.
