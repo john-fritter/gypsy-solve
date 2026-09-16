@@ -1,6 +1,7 @@
 //! Klondike as the search sees it: move ordering, the one dominance, and the
 //! [`Game`] implementation that ties them to the rules.
 
+use gypsy_core::rng::SplitMix64;
 use gypsy_core::{Card, Suit};
 use gypsy_solver::Game;
 
@@ -94,6 +95,59 @@ fn splits_a_run_for_nothing(position: &Position, action: Action) -> bool {
     !position.foundation_accepts(exposed)
 }
 
+/// Which band of the move ordering this action falls in. Lower is tried first.
+///
+/// An ordering and nothing else — every band is searched. It is a function of
+/// its own so that a salted search can shuffle within a band, keeping the
+/// heuristic while changing the descent.
+fn ordering_class(position: &Position, action: Action) -> u8 {
+    match action {
+        Action::WasteToFoundation => 0,
+        Action::PileToFoundation { .. } => 1,
+        Action::PileToPile { from, to, count } => {
+            let source = &position.piles[from as usize];
+            if source.hidden() > 0 && count as usize == source.len() - source.hidden() {
+                2 // turns up a buried card
+            } else if source.hidden() == 0 && count as usize == source.len() {
+                // Moving a whole face-up pile onto an empty one is a
+                // relabelling; a king already sitting alone is the case.
+                if position.piles[to as usize].is_empty() {
+                    7
+                } else {
+                    4
+                }
+            } else {
+                4
+            }
+        }
+        Action::WasteToPile { .. } => 3,
+        Action::Draw => 5,
+        Action::FoundationToPile { .. } => 6,
+    }
+}
+
+/// Shuffles each band of an already-sorted action list, seeded from the
+/// position and the salt so the order depends on where the search is rather
+/// than on how it got there.
+fn shuffle_within_classes(
+    position: &Position,
+    actions: &mut [Action],
+    salt: u64,
+    zobrist: &Zobrist,
+) {
+    let mut rng = SplitMix64::new((zobrist.key(position) as u64) ^ salt);
+    let mut start = 0;
+    while start < actions.len() {
+        let class = ordering_class(position, actions[start]);
+        let mut end = start + 1;
+        while end < actions.len() && ordering_class(position, actions[end]) == class {
+            end += 1;
+        }
+        rng.shuffle(&mut actions[start..end]);
+        start = end;
+    }
+}
+
 impl Game for Klondike {
     type Position = Position;
     type Action = Action;
@@ -170,7 +224,7 @@ impl Game for Klondike {
     /// the arm with the 81.945% bracket, on the only deal set this project has
     /// that proves deals unsolvable, which is the direction a wrong dominance
     /// fails in.
-    fn legal_actions(&self, position: &Position) -> Vec<Action> {
+    fn legal_actions(&self, position: &Position, salt: u64) -> Vec<Action> {
         if !self.options.worry_back {
             if let Some(autoplay) = safe_autoplay(position) {
                 return vec![autoplay];
@@ -179,29 +233,10 @@ impl Game for Klondike {
 
         let mut actions = position.legal_actions(self.options);
         actions.retain(|action| !splits_a_run_for_nothing(position, *action));
-        actions.sort_by_key(|action| match *action {
-            Action::WasteToFoundation => 0u8,
-            Action::PileToFoundation { .. } => 1,
-            Action::PileToPile { from, to, count } => {
-                let source = &position.piles[from as usize];
-                if source.hidden() > 0 && count as usize == source.len() - source.hidden() {
-                    2 // turns up a buried card
-                } else if source.hidden() == 0 && count as usize == source.len() {
-                    // Moving a whole face-up pile onto an empty one is a
-                    // relabelling; a king already sitting alone is the case.
-                    if position.piles[to as usize].is_empty() {
-                        7
-                    } else {
-                        4
-                    }
-                } else {
-                    4
-                }
-            }
-            Action::WasteToPile { .. } => 3,
-            Action::Draw => 5,
-            Action::FoundationToPile { .. } => 6,
-        });
+        actions.sort_by_key(|action| ordering_class(position, *action));
+        if salt != 0 {
+            shuffle_within_classes(position, &mut actions, salt, &self.zobrist);
+        }
         actions
     }
 
@@ -278,7 +313,7 @@ mod tests {
     #[test]
     fn a_safe_card_collapses_the_position_to_one_move() {
         let position = with_a_safe_autoplay();
-        let actions = Klondike::new(MoveOptions::NO_WORRY_BACK).legal_actions(&position);
+        let actions = Klondike::new(MoveOptions::NO_WORRY_BACK).legal_actions(&position, 0);
         assert_eq!(actions, vec![Action::PileToFoundation { from: 0 }]);
     }
 
@@ -287,7 +322,7 @@ mod tests {
     #[test]
     fn safe_autoplay_is_suppressed_when_worry_back_is_legal() {
         let position = with_a_safe_autoplay();
-        let actions = Klondike::new(MoveOptions::ALL).legal_actions(&position);
+        let actions = Klondike::new(MoveOptions::ALL).legal_actions(&position, 0);
         assert!(
             actions.len() > 1,
             "the full game keeps its alternatives, got {actions:?}"
@@ -306,7 +341,7 @@ mod tests {
         let position = Position::from_parts(piles, [5, 5, 0, 5], &waste, 1);
 
         assert_eq!(position.waste_top(), Some(card(Suit::Spades, 6)));
-        let actions = Klondike::new(MoveOptions::NO_WORRY_BACK).legal_actions(&position);
+        let actions = Klondike::new(MoveOptions::NO_WORRY_BACK).legal_actions(&position, 0);
         assert!(
             actions.contains(&Action::WasteToFoundation) && actions.len() > 1,
             "the safe waste card is an option, not a forced move, got {actions:?}"

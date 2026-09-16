@@ -20,7 +20,9 @@ mod table;
 
 pub use game::Game;
 pub use gypsy::Gypsy;
-pub use search::{replay, solve, Config, Limit, Report, UnverifiedSolution, Verdict};
+pub use search::{
+    replay, solve, solve_restarting, Config, Limit, Report, UnverifiedSolution, Verdict,
+};
 pub use table::Table;
 
 #[cfg(test)]

@@ -9,7 +9,7 @@ use gypsy_core::card::Suit;
 use gypsy_core::state::FOUNDATIONS;
 use gypsy_core::{Card, Move, MoveOptions, State};
 
-use crate::{solve, Config, Gypsy, Limit, Verdict};
+use crate::{solve, solve_restarting, Config, Gypsy, Limit, Verdict};
 
 const fn card(suit: Suit, rank: u8) -> Card {
     Card::new(suit, rank)
@@ -50,6 +50,7 @@ fn config(budget: u64, depth: u32) -> Config {
         node_budget: budget,
         max_depth: depth,
         table_entries: 1 << 16,
+        ordering_salt: 0,
     }
 }
 
@@ -168,4 +169,90 @@ fn a_zero_depth_limit_answers_unknown_rather_than_panicking() {
     let report = solve(&full_rules(), &State::deal(1), config(1_000, 0)).expect("verified");
     assert_eq!(report.verdict, Verdict::Unknown);
     assert_eq!(report.limit, Some(Limit::Depth));
+}
+
+/// A single restart is the search that existed before restarts did. Every
+/// recorded result in `docs/results` was produced that way, so this is what
+/// keeps them comparable.
+#[test]
+fn one_restart_is_the_plain_search() {
+    let game = full_rules();
+    let start = State::deal(21);
+    let config = config(200_000, 100_000);
+
+    let plain = solve(&game, &start, config).expect("a win replays");
+    let restarting = solve_restarting(&game, &start, config, 1).expect("a win replays");
+
+    assert_eq!(plain.verdict, restarting.verdict);
+    assert_eq!(plain.nodes, restarting.nodes);
+    assert_eq!(
+        plain.line.map(|line| line.len()),
+        restarting.line.map(|line| line.len())
+    );
+    assert_eq!(restarting.restarts_used, 1);
+}
+
+/// Restarts split the budget rather than multiplying it: eight of them cost
+/// what one did, which is what makes the comparison fair.
+#[test]
+fn restarts_split_the_budget_they_are_given() {
+    let game = full_rules();
+    let start = State::deal(3);
+    let budget = 40_000;
+    let report = solve_restarting(&game, &start, config(budget, 100_000), 8).expect("no false win");
+
+    assert_eq!(report.verdict, Verdict::Unknown);
+    assert!(
+        report.nodes <= budget,
+        "restarts spent {} nodes of a {budget} budget",
+        report.nodes
+    );
+    assert_eq!(report.restarts_used, 8);
+}
+
+/// The one thing a restart must never do. Exhausting a slice proves nothing,
+/// so a deal that no slice can finish stays `unknown` however many slices it
+/// is cut into.
+#[test]
+fn a_spent_slice_is_unknown_and_never_a_refutation() {
+    let game = full_rules();
+    let report =
+        solve_restarting(&game, &State::deal(4), config(5_000, 100_000), 5).expect("no false win");
+    assert_eq!(report.verdict, Verdict::Unknown);
+    assert_eq!(report.limit, Some(Limit::Budget));
+}
+
+/// Why restarts are here at all, in one deal. Seed 7 spends a 5,000-node
+/// budget on a single descent and decides nothing; the same budget cut five
+/// ways wins on the third slice, in 2,901 nodes all told. The win is replayed
+/// before it is returned, as every win is.
+#[test]
+fn restarts_find_a_win_one_descent_walks_past() {
+    let game = full_rules();
+    let start = State::deal(7);
+    let budget = config(5_000, 100_000);
+
+    let one = solve_restarting(&game, &start, budget, 1).expect("no false win");
+    assert_eq!(one.verdict, Verdict::Unknown);
+
+    let five = solve_restarting(&game, &start, budget, 5).expect("a win replays");
+    assert_eq!(five.verdict, Verdict::Solvable);
+    assert!(
+        five.nodes < one.nodes,
+        "the win cost {} nodes against a spent {}",
+        five.nodes,
+        one.nodes
+    );
+    assert!(five.restarts_used > 1, "the first ordering did not find it");
+}
+
+/// A refutation stands whatever ordering found it: the position with no moves
+/// at all is refuted by the first slice, and the rest are not needed.
+#[test]
+fn a_refutation_from_the_first_slice_ends_the_run() {
+    let game = full_rules();
+    let start = eight_kings([0; FOUNDATIONS]);
+    let report = solve_restarting(&game, &start, config(1_000, 100_000), 4).expect("no false win");
+    assert_eq!(report.verdict, Verdict::Unsolvable);
+    assert_eq!(report.restarts_used, 1);
 }

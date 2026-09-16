@@ -226,6 +226,53 @@ fn safe_autoplay(state: &State) -> Option<Move> {
     })
 }
 
+/// Which band of the move ordering this move falls in. Lower is tried first.
+///
+/// Only an ordering: every band is searched, so nothing here can discard a
+/// win. It is separated out because a salted search shuffles *within* a band,
+/// which keeps the heuristic and changes the descent.
+fn ordering_class(position: &State, mv: Move) -> u8 {
+    match mv {
+        Move::ToFoundation { .. } => 0,
+        Move::Tableau { from, to, count } => {
+            let source = &position.columns[from as usize];
+            let takes_all = count as usize == source.len();
+            let onto_empty = position.columns[to as usize].is_empty();
+            if source.hidden() > 0 && count as usize == source.len() - source.hidden() {
+                1 // turns up a buried card
+            } else if takes_all && !onto_empty {
+                2 // empties a column
+            } else if takes_all && onto_empty {
+                6 // a relabelling of the position, and nothing more
+            } else {
+                3
+            }
+        }
+        Move::Stock => 4,
+        Move::WorryBack { .. } => 5,
+    }
+}
+
+/// Shuffles each band of an already-sorted move list.
+///
+/// Seeded from the position and the salt, so the order is a function of where
+/// the search *is* rather than of how it got there: two routes to a position
+/// generate the same children in the same order, and a run reproduces exactly
+/// from its seed and salt.
+fn shuffle_within_classes(position: &State, moves: &mut [Move], salt: u64, zobrist: &Zobrist) {
+    let mut rng = SplitMix64::new((zobrist.key(position) as u64) ^ salt);
+    let mut start = 0;
+    while start < moves.len() {
+        let class = ordering_class(position, moves[start]);
+        let mut end = start + 1;
+        while end < moves.len() && ordering_class(position, moves[end]) == class {
+            end += 1;
+        }
+        rng.shuffle(&mut moves[start..end]);
+        start = end;
+    }
+}
+
 impl Game for Gypsy {
     type Position = State;
     type Action = Move;
@@ -400,7 +447,7 @@ impl Game for Gypsy {
     /// argument nowhere needs foundations to be irremovable. Solvitaire ships
     /// the same rule for Klondike's published worry-back variant.
     ///
-    fn legal_actions(&self, position: &State) -> Vec<Move> {
+    fn legal_actions(&self, position: &State, salt: u64) -> Vec<Move> {
         if !self.options.worry_back {
             if let Some(autoplay) = safe_autoplay(position) {
                 return vec![autoplay];
@@ -409,25 +456,10 @@ impl Game for Gypsy {
 
         let mut moves = position.legal_moves(self.options);
         moves.retain(|mv| !splits_a_run_for_nothing(position, *mv));
-        moves.sort_by_key(|mv| match *mv {
-            Move::ToFoundation { .. } => 0u8,
-            Move::Tableau { from, to, count } => {
-                let source = &position.columns[from as usize];
-                let takes_all = count as usize == source.len();
-                let onto_empty = position.columns[to as usize].is_empty();
-                if source.hidden() > 0 && count as usize == source.len() - source.hidden() {
-                    1 // turns up a buried card
-                } else if takes_all && !onto_empty {
-                    2 // empties a column
-                } else if takes_all && onto_empty {
-                    6 // a relabelling of the position, and nothing more
-                } else {
-                    3
-                }
-            }
-            Move::Stock => 4,
-            Move::WorryBack { .. } => 5,
-        });
+        moves.sort_by_key(|mv| ordering_class(position, *mv));
+        if salt != 0 {
+            shuffle_within_classes(position, &mut moves, salt, &self.zobrist);
+        }
         moves
     }
 
@@ -510,7 +542,7 @@ mod tests {
     #[test]
     fn a_safe_card_collapses_the_position_to_one_move() {
         let state = with_a_safe_autoplay(3);
-        let actions = Gypsy::new(MoveOptions::NO_WORRY_BACK).legal_actions(&state);
+        let actions = Gypsy::new(MoveOptions::NO_WORRY_BACK).legal_actions(&state, 0);
         assert_eq!(actions.len(), 1, "everything else is dominated");
         assert!(matches!(actions[0], Move::ToFoundation { .. }));
     }
@@ -521,7 +553,7 @@ mod tests {
     #[test]
     fn safe_autoplay_is_suppressed_when_worry_back_is_legal() {
         let state = with_a_safe_autoplay(3);
-        let actions = Gypsy::new(MoveOptions::ALL).legal_actions(&state);
+        let actions = Gypsy::new(MoveOptions::ALL).legal_actions(&state, 0);
         assert!(
             actions.len() > 1,
             "the full game keeps its alternatives, got {actions:?}"
@@ -536,7 +568,7 @@ mod tests {
         seen.insert(game.key(&state));
         for _ in 0..steps {
             visited.push(state.clone());
-            let moves = game.legal_actions(&state);
+            let moves = game.legal_actions(&state, 0);
             let Some(next) = moves.iter().find_map(|mv| {
                 let mut child = state.clone();
                 child.apply(*mv).ok()?;
@@ -561,7 +593,7 @@ mod tests {
                 if !state.stock.is_empty() {
                     continue;
                 }
-                let offered = game.legal_actions(&state);
+                let offered = game.legal_actions(&state, 0);
                 for mv in state.legal_moves(MoveOptions::ALL) {
                     if splits_a_run_for_nothing(&state, mv) {
                         fired += 1;
@@ -590,7 +622,7 @@ mod tests {
                 if state.stock.is_empty() {
                     continue;
                 }
-                let offered = game.legal_actions(&state);
+                let offered = game.legal_actions(&state, 0);
                 for mv in state.legal_moves(MoveOptions::ALL) {
                     let Move::Tableau { from, to, count } = mv else {
                         continue;
@@ -825,6 +857,45 @@ mod tests {
             differing, 8,
             "a deal that gave every column the same card would leave the exchange intact"
         );
+    }
+
+    /// A salt may reorder and nothing else. If it could add or drop an action
+    /// it would be an unargued dominance, and one that fired on some restarts
+    /// and not others — the worst shape of wrong there is here.
+    #[test]
+    fn a_salt_reorders_and_never_adds_or_drops_an_action() {
+        let game = Gypsy::new(MoveOptions::ALL);
+        let mut reordered = 0;
+
+        for seed in 0..4 {
+            for state in descend(&game, seed, 1_500) {
+                let plain = game.legal_actions(&state, 0);
+                for salt in [1u64, 0x9E37_79B9_7F4A_7C15, u64::MAX] {
+                    let salted = game.legal_actions(&state, salt);
+                    let mut left = plain.clone();
+                    let mut right = salted.clone();
+                    left.sort_by_key(|mv| format!("{mv}"));
+                    right.sort_by_key(|mv| format!("{mv}"));
+                    assert_eq!(left, right, "salt {salt} changed which moves exist");
+                    reordered += usize::from(salted != plain);
+                }
+            }
+        }
+
+        assert!(reordered > 0, "no salt ever changed the order");
+    }
+
+    /// And the order is a function of the position, not of the path: the same
+    /// position salted the same way twice gives the same order, so two routes
+    /// to it generate the same children in the same sequence.
+    #[test]
+    fn a_salted_order_depends_only_on_the_position() {
+        let game = Gypsy::new(MoveOptions::ALL);
+        for state in descend(&game, 5, 400) {
+            let once = game.legal_actions(&state, 12_345);
+            let again = game.legal_actions(&state.clone(), 12_345);
+            assert_eq!(once, again);
+        }
     }
 
     #[test]
