@@ -175,6 +175,45 @@ fn never_wanted_in_the_tableau(state: &State, card: Card) -> bool {
         .all(|slot| state.foundations[slot as usize] >= wanted)
 }
 
+/// True when this tableau move carries a strict suffix of a built run and the
+/// card it would expose has nowhere to go.
+///
+/// This is Blake & Gent's Theorem 4 (JAIR 85, Appendix B.2) in the weaker form
+/// Solvitaire implements: rather than requiring the exposed card to be built
+/// *immediately*, require only that it could be. Splitting a run is worth doing
+/// to free the card underneath; splitting it when that card is dead is a
+/// shuffle.
+///
+/// Both gates are ours and neither is decoration. See `legal_actions`.
+fn splits_a_run_for_nothing(state: &State, mv: Move) -> bool {
+    let Move::Tableau { from, to, count } = mv else {
+        return false;
+    };
+    // Gate 1. With cards still to deal, the reordering argument cannot pass a
+    // stock move; see `legal_actions`.
+    if !state.stock.is_empty() {
+        return false;
+    }
+    // Gate 2. An empty column accepts every card, which is the one destination
+    // the proof's substitution step cannot treat as a card.
+    if state.columns[to as usize].is_empty() {
+        return false;
+    }
+
+    let column = &state.columns[from as usize];
+    let count = count as usize;
+    // Moving the whole built run, or the whole column, is never restricted:
+    // neither leaves a card of the run behind to be exposed.
+    if count >= column.movable_run() || count >= column.len() {
+        return false;
+    }
+
+    // A strict suffix of the run, so the card beneath it is face up and is the
+    // run's next card.
+    let exposed = column.cards()[column.len() - count - 1];
+    state.foundation_target(exposed).is_none()
+}
+
 /// The first safe foundation play in this position, if there is one.
 fn safe_autoplay(state: &State) -> Option<Move> {
     state.columns.iter().enumerate().find_map(|(from, column)| {
@@ -229,6 +268,73 @@ impl Game for Gypsy {
     /// never reaches `P`'s alternatives from `P'` either. The win the argument
     /// promises is one the search can no longer find. This is the shape of
     /// error `CLAUDE.md` warns about and Solvitaire's authors hit twice.
+    ///
+    /// # Splitting a built run for nothing, and the two gates
+    ///
+    /// The second dominance, and the first one the *full* game has. A move
+    /// carrying a strict suffix of a built run is not generated when the card
+    /// it would expose has no foundation to go to — subject to the gates in
+    /// [`splits_a_run_for_nothing`].
+    ///
+    /// **The published rule.** Blake & Gent prove (JAIR 85, Theorem 4,
+    /// Appendix B.2) that for a game whose tableau builds down under an
+    /// *indistinguishable* build policy, whose group moves follow the same
+    /// policy as single cards, where a card leaves the tableau only for another
+    /// tableau pile or a foundation, which is won by moving every card to a
+    /// foundation, and which has no rule making a move's legality depend on its
+    /// position in the sequence — any winnable instance stays winnable when an
+    /// incomplete built pile may be moved only if the card above it is then
+    /// built immediately. Unlike their safe-foundation theorem, this one is
+    /// *deliberately* generalised past a single deck; their worked example is
+    /// five identical decks.
+    ///
+    /// **Why it reaches Gypsy at all.** "Indistinguishable" asks that any two
+    /// cards have identical or disjoint sets of places they can be built on,
+    /// and that one policy governs both single cards and groups. Alternating
+    /// colour gives the first: two red fives go on exactly the same black
+    /// sixes, a red five and a black five share none. The second is the
+    /// permissive variant this project is told not to "correct" — any
+    /// alternating-colour sequence moves as a unit, exactly as a single card
+    /// does. Standard Spider fails precisely here, its singles moving by any
+    /// suit while its groups must share one, and the paper excludes it by name.
+    ///
+    /// **Gate 1: the stock must be empty.** The proof rewrites a winning line
+    /// by deleting, swapping and redirecting moves, which needs a move to be
+    /// swappable past its neighbour when the two are unrelated. Gypsy's stock
+    /// deal is never unrelated: it lands a card on *every* column, so a
+    /// tableau move swapped past one finds the run it meant to carry buried,
+    /// and the rewrite is not legal. That is the hypothesis about move order,
+    /// failing. Gated on an empty stock it cannot fail, because nothing ever
+    /// returns a card to the stock: from such a position no continuation
+    /// contains a deal at all, and the remaining game is an instance of
+    /// exactly the game the theorem covers. The restriction then preserves
+    /// winnability *of that position*, which is all the search needs, since
+    /// positions with cards still to deal are left alone.
+    ///
+    /// **Gate 2: the destination must not be an empty column.** Gypsy admits
+    /// any card to an empty column. The proof's critical step replaces a move
+    /// onto one card with the same move onto another, and argues it stays
+    /// legal because the two cards accept the same set — an argument about
+    /// cards, which an empty column is not. Restricting only moves that land
+    /// on a card means the last non-compliant move the proof rewrites always
+    /// has a card as its destination, and so does the move onto the pile it
+    /// vacated, since a partial move leaves that pile non-empty. Moves onto an
+    /// empty column are never restricted, so they never appear as the move
+    /// being rewritten.
+    ///
+    /// **What the gates cost**, measured before either was written:
+    /// 49.7% of the full arm's generated moves split a run for nothing, and
+    /// 42.1% still do with both gates applied. See `DECISIONS.md`.
+    ///
+    /// **Why this one survives worry-back when safe autoplay does not.** It
+    /// makes no claim about a card never being wanted again. It says only that
+    /// a run is split to free the card beneath it, and that splitting it to
+    /// free a dead card achieves nothing a later split could not. Worry-back
+    /// adds moves *into* the tableau, which the theorem's hypotheses do not
+    /// restrict, and Solvitaire ships this rule for Klondike with removable
+    /// foundations — the published worry-back variant.
+    ///
+    ///
     fn legal_actions(&self, position: &State) -> Vec<Move> {
         if !self.options.worry_back {
             if let Some(autoplay) = safe_autoplay(position) {
@@ -237,6 +343,7 @@ impl Game for Gypsy {
         }
 
         let mut moves = position.legal_moves(self.options);
+        moves.retain(|mv| !splits_a_run_for_nothing(position, *mv));
         moves.sort_by_key(|mv| match *mv {
             Move::ToFoundation { .. } => 0u8,
             Move::Tableau { from, to, count } => {
@@ -354,6 +461,140 @@ mod tests {
             actions.len() > 1,
             "the full game keeps its alternatives, got {actions:?}"
         );
+    }
+
+    /// Walks the search's first descent, collecting positions.
+    fn descend(game: &Gypsy, seed: u64, steps: usize) -> Vec<State> {
+        let mut state = State::deal(seed);
+        let mut seen = std::collections::HashSet::new();
+        let mut visited = Vec::new();
+        seen.insert(game.key(&state));
+        for _ in 0..steps {
+            visited.push(state.clone());
+            let moves = game.legal_actions(&state);
+            let Some(next) = moves.iter().find_map(|mv| {
+                let mut child = state.clone();
+                child.apply(*mv).ok()?;
+                seen.insert(game.key(&child)).then_some(child)
+            }) else {
+                break;
+            };
+            state = next;
+        }
+        visited
+    }
+
+    /// Splitting a run to expose a card with nowhere to go is a shuffle, and
+    /// once the stock is empty the search is not offered it.
+    #[test]
+    fn a_run_is_not_split_to_expose_a_dead_card() {
+        let game = Gypsy::new(MoveOptions::ALL);
+        let mut fired = 0;
+
+        for seed in 0..6 {
+            for state in descend(&game, seed, 4_000) {
+                if !state.stock.is_empty() {
+                    continue;
+                }
+                let offered = game.legal_actions(&state);
+                for mv in state.legal_moves(MoveOptions::ALL) {
+                    if splits_a_run_for_nothing(&state, mv) {
+                        fired += 1;
+                        assert!(
+                            !offered.contains(&mv),
+                            "{mv} splits a run for nothing and was still offered"
+                        );
+                    }
+                }
+            }
+        }
+
+        assert!(fired > 0, "the test never met the case it is pinning");
+    }
+
+    /// Gate 1. While cards are still to be dealt the rule proves nothing,
+    /// because a stock deal lands on every column and cannot be reordered
+    /// past a tableau move. Those moves stay.
+    #[test]
+    fn a_run_may_be_split_for_nothing_while_the_stock_holds_cards() {
+        let game = Gypsy::new(MoveOptions::ALL);
+        let mut kept = 0;
+
+        for seed in 0..6 {
+            for state in descend(&game, seed, 1_500) {
+                if state.stock.is_empty() {
+                    continue;
+                }
+                let offered = game.legal_actions(&state);
+                for mv in state.legal_moves(MoveOptions::ALL) {
+                    let Move::Tableau { from, to, count } = mv else {
+                        continue;
+                    };
+                    let column = &state.columns[from as usize];
+                    let count = count as usize;
+                    if count >= column.movable_run() || count >= column.len() {
+                        continue;
+                    }
+                    if !state.columns[to as usize].is_empty()
+                        && state
+                            .foundation_target(column.cards()[column.len() - count - 1])
+                            .is_none()
+                    {
+                        kept += 1;
+                        assert!(offered.contains(&mv), "{mv} was cut behind the stock gate");
+                    }
+                }
+            }
+        }
+
+        assert!(kept > 0, "the test never met the case it is pinning");
+    }
+
+    /// Gate 2. An empty column accepts every card, which is the destination
+    /// the proof's substitution step cannot treat as a card, so those moves
+    /// stay whatever they expose.
+    #[test]
+    fn a_move_onto_an_empty_column_is_never_cut() {
+        let game = Gypsy::new(MoveOptions::ALL);
+
+        for seed in 0..8 {
+            for state in descend(&game, seed, 3_000) {
+                for mv in state.legal_moves(MoveOptions::ALL) {
+                    if let Move::Tableau { to, .. } = mv {
+                        if state.columns[to as usize].is_empty() {
+                            assert!(
+                                !splits_a_run_for_nothing(&state, mv),
+                                "{mv} lands on an empty column and must not be cut"
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// Moving the whole run, or the whole column, exposes no card of the run
+    /// and is never the rule's business.
+    #[test]
+    fn whole_run_and_whole_column_moves_are_never_cut() {
+        let game = Gypsy::new(MoveOptions::ALL);
+
+        for seed in 0..6 {
+            for state in descend(&game, seed, 3_000) {
+                for mv in state.legal_moves(MoveOptions::ALL) {
+                    let Move::Tableau { from, count, .. } = mv else {
+                        continue;
+                    };
+                    let column = &state.columns[from as usize];
+                    if count as usize >= column.movable_run() || count as usize >= column.len() {
+                        assert!(
+                            !splits_a_run_for_nothing(&state, mv),
+                            "{mv} carries the whole run or column and must not be cut"
+                        );
+                    }
+                }
+            }
+        }
     }
 
     #[test]

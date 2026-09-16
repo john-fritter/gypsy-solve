@@ -72,6 +72,28 @@ fn safe_autoplay(position: &Position) -> Option<Action> {
     })
 }
 
+/// True when this move carries a strict suffix of a built run and the card it
+/// would expose has nowhere to go.
+///
+/// Blake & Gent's Theorem 4 in the weaker form Solvitaire implements: require
+/// only that the exposed card *could* be built, not that the next move builds
+/// it. Splitting a run frees the card beneath; splitting it when that card is
+/// dead is a shuffle. See `legal_actions` for why Klondike needs no gate.
+fn splits_a_run_for_nothing(position: &Position, action: Action) -> bool {
+    let Action::PileToPile { from, count, .. } = action else {
+        return false;
+    };
+    let pile = &position.piles[from as usize];
+    let count = count as usize;
+    // Moving the whole run, or the whole pile, leaves no card of the run
+    // behind to be exposed.
+    if count >= pile.movable_run() || count >= pile.len() {
+        return false;
+    }
+    let exposed = pile.cards()[pile.len() - count - 1];
+    !position.foundation_accepts(exposed)
+}
+
 impl Game for Klondike {
     type Position = Position;
     type Action = Action;
@@ -120,6 +142,34 @@ impl Game for Klondike {
     /// The tempting repair — play it up, worry it back if it is ever wanted —
     /// is circular under a transposition table, and is written up in
     /// `DECISIONS.md` so nobody re-derives it.
+    ///
+    /// # Splitting a built run for nothing
+    ///
+    /// Blake & Gent's Theorem 4 (JAIR 85, Appendix B.2), which for Klondike
+    /// applies as published, with no gate. Every hypothesis holds here:
+    ///
+    /// - **Indistinguishable build policy.** Two cards of the same rank and
+    ///   colour can be built on exactly the same cards; any other pair shares
+    ///   none. Empty piles take kings only, so a king's build destinations are
+    ///   empty and disjoint from every other card's — the case that forces
+    ///   Gypsy to gate here does not arise.
+    /// - **One policy for groups and single cards.** `legal_actions` generates
+    ///   `PileToPile` for every prefix of the movable run under the same test.
+    /// - **Cards leave the tableau only for another pile or a foundation.**
+    /// - **Won by moving every card to a foundation.**
+    /// - **No rule makes a move's legality depend on its position in the
+    ///   sequence.** The stock deals to the *waste*, never to the piles, so a
+    ///   tableau move and a `Draw` are genuinely unrelated and the proof may
+    ///   swap them. Gypsy's stock deals to every column and cannot.
+    ///
+    /// Worry-back is no obstacle: the hypotheses restrict where a card may go
+    /// *from* the tableau, not what may arrive in it, and Solvitaire ships this
+    /// rule for Klondike with removable foundations — the published variant.
+    ///
+    /// This is why the rule is validated here rather than on Gypsy. It fires in
+    /// the arm with the 81.945% bracket, on the only deal set this project has
+    /// that proves deals unsolvable, which is the direction a wrong dominance
+    /// fails in.
     fn legal_actions(&self, position: &Position) -> Vec<Action> {
         if !self.options.worry_back {
             if let Some(autoplay) = safe_autoplay(position) {
@@ -128,6 +178,7 @@ impl Game for Klondike {
         }
 
         let mut actions = position.legal_actions(self.options);
+        actions.retain(|action| !splits_a_run_for_nothing(position, *action));
         actions.sort_by_key(|action| match *action {
             Action::WasteToFoundation => 0u8,
             Action::PileToFoundation { .. } => 1,

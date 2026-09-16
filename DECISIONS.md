@@ -1620,3 +1620,183 @@ from solver source because the papers were unreachable, and source is precise
 about *what* a rule is while silent about *what it assumes*. Both errors above
 are of that kind: a threshold read correctly, a hypothesis invisible. Where a
 proof boundary matters, read the proof.
+
+## 2026-09-16 — Measured: the incomplete-pile rule would remove 42% of Gypsy's moves
+
+**Status:** firm as a measurement. Its "not implemented" note is superseded by
+*A run is not split to expose a dead card* below, which implements the rule
+behind both gates proposed here.
+
+Blake & Gent's Theorem 4 (Appendix B.2) restricts moving an incomplete built
+pile to the case where the card it exposes is then built to foundation. Unlike
+their safe-foundation theorem it is deliberately generalised past a single deck.
+Before proving it for Gypsy, the cheap question: would it cut anything?
+
+**Method.** `cli/src/bin/branching.rs`, a diagnostic binary. Positions are
+sampled along the search's own first descent — always the first action in
+`legal_actions` order reaching an unvisited position — because that is where the
+budget goes. Ten seeds, 50,000 steps each. A move counts as *partial* when it
+carries a strict suffix of the built run, so whole-run and whole-pile moves are
+never affected. *Removable* means the card it would expose has no foundation to
+go to, which is the weaker form Solvitaire implements.
+
+| Arm | Positions | Moves | Partial | Removable | + onto-card | + stock-empty | Both gates |
+|---|---|---|---|---|---|---|---|
+| full (worry-back) | 44,098 | 598,978 | 55.0% | **49.7%** | 46.2% | 42.2% | **42.1%** |
+| no-worry-back | 5,544 | 65,245 | 73.5% | 73.4% | 41.5% | 4.7% | 4.2% |
+
+**Half the full arm's move generation is partial-group moves that expose a dead
+card**, and 42% survives both conservative gates below. At a mean branching
+factor of 13.6 that compounds hard, and it is the first cut of this size this
+project has found for the worry-back game.
+
+The restricted arm's row is not comparable: its walks die after 5,544 positions
+against the full arm's 44,098, so they rarely reach an empty stock and the
+stock-empty column is a sampling artefact rather than a property of the game.
+
+**Two proof obligations, and both have a conservative gate that appears to
+discharge them.** Neither is optional — `CLAUDE.md` requires the proof before
+the rule, and the two dead dominances of 2026-09-14 died on exactly this kind of
+unexamined hypothesis.
+
+1. **Empty columns may break the "indistinguishable build policy" hypothesis.**
+   The condition is that any two cards have identical or disjoint sets of places
+   they can move to. Gypsy lets *any* card go to an empty column, so every
+   card's set overlaps every other's — unless empty columns are read as a
+   separate spaces policy rather than part of the build policy. The proof never
+   mentions empty piles, and its invariant is phrased entirely in terms of two
+   *cards* whose sub-piles are swapped. Evidence that the authors did not face
+   this: of the nine Solvitaire presets using the rule, every one restricts
+   spaces to kings or auto-fills them, and none is two-deck. **Gate: restrict
+   only moves onto a non-empty column.** Then the last non-compliant move the
+   proof rewrites always has a card as its destination, which is what the
+   invariant needs. Costs 3.5 points of the 49.7%.
+
+2. **The stock may violate "no rules invalidating moves by constraints on their
+   order".** Gypsy's stock deals one card to every column, so a deal interleaved
+   into the proof's rewritten suffix lands cards on both affected piles and the
+   invariant's "everything else identical" is no longer obvious. **Gate: apply
+   the rule only once the stock is empty.** The stock never refills, so from a
+   stock-empty position the remaining game contains no stock move at all and is
+   an instance of exactly the game Theorem 4 covers. Costs a further 4 points.
+
+Both gates together leave **42.1%**, so conservatism is nearly free here. That
+is the trade to take: the ungated rule buys 7.6 more points and would rest on
+two hypotheses nobody has checked for this game.
+
+**Not yet argued, and the next piece of work.** That both gates *appear* to
+discharge their obligations is a sketch, not a proof. The gap is that Theorem 4
+is a statement about a whole instance, while we would apply it as a per-position
+move-generation filter under a transposition table — the same composition
+hazard `lonelybot` spends 569 lines on. The write-up owes: why restricting only
+at stock-empty positions preserves solvability from those positions, and why
+requiring compliance only of card-destination moves leaves the proof's case
+analysis intact.
+
+**Recorded because it is the reason to be careful:** this is the third rule this
+project has measured as promising. Two of the previous three were unsound.
+
+## 2026-09-16 — A run is not split to expose a dead card: the full game's first dominance
+
+**Status:** firm.
+
+A tableau move carrying a strict suffix of a built run is not generated when
+the card it would expose has no foundation to go to. This is Blake & Gent's
+Theorem 4 (JAIR 85, Appendix B.2) in the weaker form Solvitaire implements —
+require only that the exposed card *could* be built, not that the next move
+builds it.
+
+**It is the first dominance this project has for the worry-back game**, and it
+is the largest cut found so far by a wide margin.
+
+**Why it reaches Gypsy when the safe-foundation rule does not.** That theorem
+excludes multiple decks in terms. This one is *deliberately* generalised past a
+single deck — the paper's worked example is five identical decks. Its condition
+is an "indistinguishable" build policy: any two cards have identical or disjoint
+sets of cards they can be built on, and one policy governs both single cards and
+groups. Alternating colour gives the first. The second is **the permissive
+variant `CLAUDE.md` forbids correcting toward the textbook rules** — any
+alternating-colour sequence moves as a unit, exactly as a single card does.
+Standard Spider fails precisely there and the paper excludes it by name. The
+rule is available to us because of the ruleset John plays.
+
+**Two gates, both ours, both load-bearing.**
+
+*Gate 1, the stock must be empty.* The proof rewrites a winning line by
+deleting, swapping and redirecting moves, which needs unrelated neighbouring
+moves to be swappable. Gypsy's stock deal is never unrelated: it lands a card on
+every column, so a tableau move swapped past one finds its run buried. That is
+the theorem's move-order hypothesis failing. Gated on an empty stock it cannot,
+because nothing returns cards to the stock: from such a position no continuation
+holds a deal at all, and the remaining game is an instance of exactly what the
+theorem covers. Positions with cards still to deal are left alone.
+
+*Gate 2, the destination must not be an empty column.* Gypsy admits any card to
+an empty column. The proof's critical step replaces a move onto one card with
+the same move onto another and argues legality from the two cards accepting the
+same set — an argument about cards, which an empty column is not. Restricting
+only moves that land on a card means the move the proof rewrites always has a
+card as its destination, as does the move onto the pile it vacated, since a
+partial move leaves that pile non-empty.
+
+Klondike needs neither gate and gets neither: its stock deals to the *waste*, so
+a tableau move and a draw really are unrelated, and its empty piles take kings
+only, so a king's build destinations are empty and disjoint from every other
+card's. Two implementations again, for the same reason as safe autoplay.
+
+**Measured, and the case for the gates is that they are nearly free:** 49.7% of
+the full Gypsy arm's generated moves split a run for nothing; 42.1% still do
+with both gates. See the entry above.
+
+**Klondike, 50 deals, 3M, table 256 MiB.** Baselines are the recorded
+`klondike-probe-3M-50deals` and `klondike-nwb-3M-50deals-autoplay`; the new runs
+are `klondike-{full,nwb}-3M-50deals-splitrun`.
+
+| Arm | | Solvable | Unsolvable | Unknown | Nodes on deals decided in both |
+|---|---|---|---|---|---|
+| full | without | 24 | 9 | 17 | |
+| full | with | **31** | **10** | **9** | **-82.1%** |
+| restricted | without | 26 | 10 | 14 | |
+| restricted | with | **31** | **12** | **7** | **-71.8%** |
+
+**No verdict contradicted in either arm and none regressed.** Eight deals newly
+decided in the full arm, seven in the restricted. Most telling:
+proven-unsolvable counts went **up**, 9 to 10 and 10 to 12, and not one
+existing proof was overturned. That is the direction a wrong dominance fails
+in, on the only deal set this project has that refutes anything.
+
+The full arm's unknown bucket falls from 34% to 18% **at 3M** — better than the
+22% the old search needed a 48M budget to reach. 81.945% stays inside the
+bracket, now 40.6 points wide against 65.8.
+
+**Gypsy, 50 deals, 5M, table 512 MiB**, against `gypsy-both-5M-50deals`:
+
+| Arm | Without | With |
+|---|---|---|
+| no-worry-back | 12 solvable, 38 unknown | **28 solvable, 22 unknown** |
+| full | 12 solvable (all carried), 38 unknown | **29 solvable, 21 unknown** |
+
+No verdict contradicted, none regressed.
+
+**And the result this project has been waiting for: the full arm solved a deal
+by itself.** Seed 15, 68,592 nodes, a deal the restricted arm does not solve.
+Before this the full Gypsy arm had resolved *nothing* — 0 of 50 at the same
+budget. Stated precisely: seed 15 is `unknown` in the restricted arm rather than
+proven unsolvable, so this is not yet proof that the deal needs worry-back. It
+is the first deal the worry-back search has ever cracked on its own.
+
+**A line-length note, and `DESIGN.md` is amended for it.** Every Klondike line
+this rule touched got shorter, one from 1,351 moves to 231. The old bar asked
+for identical line lengths, which was written for safe autoplay — a rule that
+*forces* a move the ordering already took first, so the descent barely moves.
+A rule that *removes* half the move set sends the search elsewhere, and every
+line is still replayed from the deal before it is believed. Shorter lines are
+evidence the search stopped wandering, which is exactly what the 99,982-move
+lines of 2026-09-15 said it was doing.
+
+**What is still owed.** The gates are argued here and in the code, not proved to
+the standard of the safe-autoplay entry: each is a reason the theorem's proof
+survives, not a re-run of its case analysis. The honest status is that the
+measured evidence is strong — two arms, no contradictions, three new unsolvable
+proofs — and the argument is a sketch. If a later run contradicts a verdict,
+this entry is where to look first.

@@ -66,15 +66,34 @@ winning line contains is a measurement in its own right — see
 `analysis/worry_back_usage.py`, which counts how much worry-back wins actually
 use.
 
-The solver applies one dominance, and only in the restricted game: with
-`--no-worry-back` a card that can never be wanted in the tableau again is
-played up and nothing else is considered at that position. It is gated because
-the proof is — worry-back lets the cards the rule checks come back down, and
-then the rule proves nothing. Both games have the rule, with a proof each:
-Gypsy checks four opposite-colour foundation piles because two decks give each
-suit two, Klondike checks two, and Klondike additionally excludes the waste,
-because playing a card off it re-aligns every later draw-three. The full game
-has no dominance at all, and on a real Gypsy deal it mostly returns `unknown`.
+The solver applies two dominances, each with a proof that it cannot discard a
+winning line. Both are implemented once per game rather than shared, because
+the proofs differ.
+
+**Safe autoplay, restricted game only.** With `--no-worry-back`, a card that can
+never be wanted in the tableau again is played up and nothing else is considered
+at that position. The gate is the proof: worry-back lets the cards the rule
+checks come back down, and then it proves nothing. Gypsy checks four
+opposite-colour foundation piles because two decks give each suit two; Klondike
+checks two, and additionally excludes the waste, because playing a card off it
+re-aligns every later draw-three.
+
+**Never split a built run to expose a dead card**, in both games. A move
+carrying part of a built run is not offered when the card it would uncover has
+no foundation to go to: splitting a run frees the card beneath it, and splitting
+it to free a dead card is a shuffle. This is Blake & Gent's Theorem 4, which
+unlike their safe-foundation rule is proved for games with duplicate cards, and
+which reaches Gypsy because any alternating-colour sequence moves as a unit —
+the theorem needs one policy for single cards and for groups. Gypsy gates it on
+an exhausted stock and a non-empty destination, for reasons given on
+`Gypsy::legal_actions`; Klondike needs neither gate.
+
+The second rule is the only one the **full** game has, and it is what took the
+Gypsy worry-back arm from resolving nothing to resolving most of a 50-deal
+sample. Hard deals still return `unknown`.
+
+`cargo run --release --bin branching` reports how much of move generation each
+kind of move accounts for, which is how that rule was sized before it was built.
 
 ## Batch runs
 
