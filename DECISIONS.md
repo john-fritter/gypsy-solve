@@ -1623,8 +1623,9 @@ proof boundary matters, read the proof.
 
 ## 2026-09-16 — Measured: the incomplete-pile rule would remove 42% of Gypsy's moves
 
-**Status:** firm as a measurement. The dominance is **not implemented** — the
-proof obligations below come first.
+**Status:** firm as a measurement. Its "not implemented" note is superseded by
+*A run is not split to expose a dead card* below, which implements the rule
+behind both gates proposed here.
 
 Blake & Gent's Theorem 4 (Appendix B.2) restricts moving an incomplete built
 pile to the case where the card it exposes is then built to foundation. Unlike

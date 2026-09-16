@@ -243,14 +243,30 @@ budget-exhausted.
       decided in both arms. No verdict contradicted; 22.5% fewer nodes; one
       deal newly proved. See the hole below, now closed.
 
-      **Still open for the worry-back game, which is the headline figure.**
-      The proof needs the opposite-colour cards to be on foundations and
-      unable to leave, and worry-back is exactly the rule that lets them
-      leave. The repair that suggests itself — play it up, worry it back if
-      it is ever wanted — is circular under a transposition table and is
-      written up in `DECISIONS.md` so nobody re-derives it. So the full game
-      still has no dominance at all, and either one is found for it or the
-      search needs something that is not a dominance.
+      **Still open for the worry-back game.** The proof needs the
+      opposite-colour cards to be on foundations and unable to leave, and
+      worry-back is exactly the rule that lets them leave. The repair that
+      suggests itself — play it up, worry it back if it is ever wanted — is
+      circular under a transposition table and is written up in
+      `DECISIONS.md` so nobody re-derives it. A worry-back-legal form does
+      exist in the literature, at a stronger threshold, but is proved for a
+      single deck only; see `docs/research/prior-art.md`.
+
+   4. *Never split a built run to expose a dead card.* **Done 2026-09-16, and
+      the first dominance the full game has ever had.** A move carrying a
+      strict suffix of a built run is not offered when the card it would
+      uncover has no foundation to go to. Blake & Gent's Theorem 4, which
+      unlike their safe-foundation rule is proved for duplicate cards, and
+      which reaches Gypsy because the permissive group-move variant gives the
+      one policy for single cards and groups that the theorem requires —
+      standard Spider fails exactly there. Two gates of our own for Gypsy, an
+      exhausted stock and a non-empty destination; Klondike needs neither.
+
+      Measured before it was built: it removes 42% of the full arm's
+      generated moves. Klondike's unknown bucket fell 34% to 18% at 3M,
+      better than the old search reached at 48M, with three new
+      proven-unsolvable deals and no verdict contradicted. The Gypsy full arm
+      went from 0 of 50 resolved to 29, and solved its first deal by itself.
 
    Every one of these is measured on the same Klondike deal set, and Klondike
    is a regression test with teeth: a dominance may change node counts and
@@ -410,18 +426,21 @@ rather than re-deriving:
 
 ### Do not run a Gypsy batch yet
 
-The Klondike unknown bucket stands at **22% on 50 deals at a 48M budget**
-(2026-09-15, probing table), and 34% at 3M. It was 40% at 3M on 2026-09-13.
-While it is anywhere near this large the validation bracket spans tens of
-points, which is consistent with a correct search and cannot distinguish one
-from a search that misses wins systematically.
+The Klondike unknown bucket stands at **18% on 50 deals at a 3M budget**
+(2026-09-16, split-run dominance). The run of it: 40% at 3M on 2026-09-13, 34%
+once the table probed, 22% at 3M's *sixteenfold* budget of 48M — and now 18% at
+3M again. While it is anywhere near this large the validation bracket spans tens
+of points, which is consistent with a correct search and cannot distinguish one
+from a search that misses wins systematically. It is 40.6 points wide today,
+against 65.8 before.
 
-**Budget will not close it.** Swept at 3M, 12M and 48M, the bucket falls by a
-factor of about 0.804 per fourfold step, and that slope did not change when
-the table was fixed — the curve moved down, not round. From 11 unknown, the 5%
-gate is about 6.8 further fourfold steps, roughly 10^4 times the budget. The
-route has to be dominances or something that is not a dominance at all, not a
-bigger number on `--budget`.
+**Budget will not close it; a dominance just did more than 16x the budget.**
+Swept at 3M, 12M and 48M, the bucket fell by a factor of about 0.804 per
+fourfold step, and the slope did not change when the table was fixed — the curve
+moved down, not round. Reaching the 5% gate that way needed roughly 10^4 times
+the budget. One dominance then beat the whole 3M-to-48M sweep at the original
+budget. That is the confirmation the route is dominances, and the sweep should
+be re-run on the current search before anyone plans around the old slope.
 
 Two thresholds, and they are different:
 
