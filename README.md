@@ -95,6 +95,30 @@ sample. Hard deals still return `unknown`.
 `cargo run --release --bin branching` reports how much of move generation each
 kind of move accounts for, which is how that rule was sized before it was built.
 
+## Restarts
+
+`--restarts k` splits the budget into *k* searches, each under a different move
+ordering, and stops at the first one that decides the deal. It is on `solve`,
+`klondike` and `batch`, and defaults to 1, which is the search as it was before
+restarts existed.
+
+Nothing about the three-valued verdict changes. Each restart is a whole search:
+a win is replayed from the deal before it is believed, and `unsolvable` is still
+claimed only by a search that exhausted the reachable game without touching a
+limit — a proof whatever ordering produced it. **A restart can turn `unknown`
+into a decision and can never turn a decision into anything else.** The first
+slice always runs the game's own ordering, so a restart run begins with the
+deterministic one.
+
+The ordering is shuffled *within* the bands the game already sorts into, seeded
+from the position, so two routes to the same position still generate the same
+children in the same order and a verdict is still reproducible from its seed.
+
+**It is worth a great deal on Gypsy and nothing on Klondike**, and the reason is
+line length. Gypsy wins run 1,301 to 99,982 moves and are walked into or missed;
+Klondike wins run 136 to 467 and its unknown deals are simply large. See
+`DECISIONS.md`.
+
 ## Batch runs
 
 `gypsy batch` solves many deals at once and is what the long runs use. It
