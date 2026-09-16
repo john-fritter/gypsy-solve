@@ -243,14 +243,18 @@ budget-exhausted.
       decided in both arms. No verdict contradicted; 22.5% fewer nodes; one
       deal newly proved. See the hole below, now closed.
 
-      **Still open for the worry-back game.** The proof needs the
-      opposite-colour cards to be on foundations and unable to leave, and
-      worry-back is exactly the rule that lets them leave. The repair that
-      suggests itself — play it up, worry it back if it is ever wanted — is
-      circular under a transposition table and is written up in
-      `DECISIONS.md` so nobody re-derives it. A worry-back-legal form does
-      exist in the literature, at a stronger threshold, but is proved for a
-      single deck only; see `docs/research/prior-art.md`.
+      **The worry-back game got its own form, 2026-09-16.** The proof above
+      needs the opposite-colour cards to be on foundations and unable to
+      leave, and worry-back is exactly the rule that lets them leave; the
+      repair that suggests itself — play it up, worry it back if it is ever
+      wanted — is circular under a transposition table and is written up in
+      `DECISIONS.md` so nobody re-derives it. The rule that *does* hold with
+      worry-back legal is Keller's, at stronger thresholds: opposite-colour
+      foundations within one rank, the same-colour twin within two, and — for
+      two decks, where the paper's proof stops and ours takes over — **both
+      slots of the card's own suit within one**, which is what stops the
+      duplicate breaking the reordering. Shipped after restarts made the test
+      fair; it gains the full arm seed 0, solved by itself in 843 moves.
 
    4. *Never split a built run to expose a dead card.* **Done 2026-09-16, and
       the first dominance the full game has ever had.** A move carrying a
@@ -344,10 +348,13 @@ Three things follow, in this order:
    answered on 2026-09-16 and the answer is yes**: swept at 3M, 12M and 48M, the
    uncapped full arm resolved *nothing* of its own above 5M, spending its entire
    budget on every deal the restricted arm left it — 576M nodes across 12 deals
-   at 48M, none decided. Seed 15 remains the only deal the worry-back search has
-   ever cracked by itself. The carry hides this by making the full arm's totals
-   equal the restricted arm's, which is also why the measured worry-back delta
-   is currently exactly zero. One constraint
+   at 48M, none decided. Restarts and the safe-foundation rule have since moved
+   that a little: the worry-back search has now cracked **three** deals on its
+   own, 15, 45 and 0, against one before. It is still nowhere near a delta —
+   under restarts the full arm's totals are the restricted arm's plus seed 0, so
+   the **measured worry-back delta is one deal out of fifty**, and that one is a
+   candidate rather than a proof, since the restricted arm returns `unknown` on
+   it rather than a refutation. One constraint
    settled in advance — worry-backs spent is path state and the table stores
    positions, so an exhausted capped search proves *no win within k*, never
    `Unsolvable`. `Unsolvable` must map to `Unknown` in that arm.
