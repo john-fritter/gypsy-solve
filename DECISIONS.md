@@ -1620,3 +1620,77 @@ from solver source because the papers were unreachable, and source is precise
 about *what* a rule is while silent about *what it assumes*. Both errors above
 are of that kind: a threshold read correctly, a hypothesis invisible. Where a
 proof boundary matters, read the proof.
+
+## 2026-09-16 — Measured: the incomplete-pile rule would remove 42% of Gypsy's moves
+
+**Status:** firm as a measurement. The dominance is **not implemented** — the
+proof obligations below come first.
+
+Blake & Gent's Theorem 4 (Appendix B.2) restricts moving an incomplete built
+pile to the case where the card it exposes is then built to foundation. Unlike
+their safe-foundation theorem it is deliberately generalised past a single deck.
+Before proving it for Gypsy, the cheap question: would it cut anything?
+
+**Method.** `cli/src/bin/branching.rs`, a diagnostic binary. Positions are
+sampled along the search's own first descent — always the first action in
+`legal_actions` order reaching an unvisited position — because that is where the
+budget goes. Ten seeds, 50,000 steps each. A move counts as *partial* when it
+carries a strict suffix of the built run, so whole-run and whole-pile moves are
+never affected. *Removable* means the card it would expose has no foundation to
+go to, which is the weaker form Solvitaire implements.
+
+| Arm | Positions | Moves | Partial | Removable | + onto-card | + stock-empty | Both gates |
+|---|---|---|---|---|---|---|---|
+| full (worry-back) | 44,098 | 598,978 | 55.0% | **49.7%** | 46.2% | 42.2% | **42.1%** |
+| no-worry-back | 5,544 | 65,245 | 73.5% | 73.4% | 41.5% | 4.7% | 4.2% |
+
+**Half the full arm's move generation is partial-group moves that expose a dead
+card**, and 42% survives both conservative gates below. At a mean branching
+factor of 13.6 that compounds hard, and it is the first cut of this size this
+project has found for the worry-back game.
+
+The restricted arm's row is not comparable: its walks die after 5,544 positions
+against the full arm's 44,098, so they rarely reach an empty stock and the
+stock-empty column is a sampling artefact rather than a property of the game.
+
+**Two proof obligations, and both have a conservative gate that appears to
+discharge them.** Neither is optional — `CLAUDE.md` requires the proof before
+the rule, and the two dead dominances of 2026-09-14 died on exactly this kind of
+unexamined hypothesis.
+
+1. **Empty columns may break the "indistinguishable build policy" hypothesis.**
+   The condition is that any two cards have identical or disjoint sets of places
+   they can move to. Gypsy lets *any* card go to an empty column, so every
+   card's set overlaps every other's — unless empty columns are read as a
+   separate spaces policy rather than part of the build policy. The proof never
+   mentions empty piles, and its invariant is phrased entirely in terms of two
+   *cards* whose sub-piles are swapped. Evidence that the authors did not face
+   this: of the nine Solvitaire presets using the rule, every one restricts
+   spaces to kings or auto-fills them, and none is two-deck. **Gate: restrict
+   only moves onto a non-empty column.** Then the last non-compliant move the
+   proof rewrites always has a card as its destination, which is what the
+   invariant needs. Costs 3.5 points of the 49.7%.
+
+2. **The stock may violate "no rules invalidating moves by constraints on their
+   order".** Gypsy's stock deals one card to every column, so a deal interleaved
+   into the proof's rewritten suffix lands cards on both affected piles and the
+   invariant's "everything else identical" is no longer obvious. **Gate: apply
+   the rule only once the stock is empty.** The stock never refills, so from a
+   stock-empty position the remaining game contains no stock move at all and is
+   an instance of exactly the game Theorem 4 covers. Costs a further 4 points.
+
+Both gates together leave **42.1%**, so conservatism is nearly free here. That
+is the trade to take: the ungated rule buys 7.6 more points and would rest on
+two hypotheses nobody has checked for this game.
+
+**Not yet argued, and the next piece of work.** That both gates *appear* to
+discharge their obligations is a sketch, not a proof. The gap is that Theorem 4
+is a statement about a whole instance, while we would apply it as a per-position
+move-generation filter under a transposition table — the same composition
+hazard `lonelybot` spends 569 lines on. The write-up owes: why restricting only
+at stock-empty positions preserves solvability from those positions, and why
+requiring compliance only of card-destination moves leaves the proof's case
+analysis intact.
+
+**Recorded because it is the reason to be careful:** this is the third rule this
+project has measured as promising. Two of the previous three were unsound.
