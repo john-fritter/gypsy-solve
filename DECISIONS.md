@@ -1800,3 +1800,101 @@ survives, not a re-run of its case analysis. The honest status is that the
 measured evidence is strong — two arms, no contradictions, three new unsolvable
 proofs — and the argument is a sketch. If a later run contradicts a verdict,
 this entry is where to look first.
+
+## 2026-09-16 — Re-swept on the current search: the curve moved down, not round, and the wall is now memory
+
+**Status:** firm as a measurement. Supersedes the extrapolation in *Re-measured:
+the search does converge with budget, far too slowly* (2026-09-14), whose 0.804
+slope was taken before either dominance existed. `DESIGN.md` asked for this
+re-sweep before anyone planned around that slope.
+
+**Method.** The same 50 Klondike deals, full arm, at 3M, 12M and 48M nodes, with
+the table held at 5.6 slots per node of budget — 256 MiB, 1 GiB, 4 GiB — so that
+what varies between levels is the budget and not table pressure. That protocol
+is checked rather than assumed this time: peak fill was **17.9% of capacity at
+both upper levels**, so no level was evicting. Raw results in
+`docs/results/klondike-sweep-{12M,48M}-50deals-splitrun.jsonl`; the 3M level is
+the recorded `klondike-full-3M-50deals-splitrun.jsonl`, which the re-run
+reproduced exactly — verdict, node count and line length on all 50, on different
+hardware again.
+
+| Budget | Table | Solvable | Unsolvable | Unknown | Bracket |
+|---|---|---|---|---|---|
+| 3M | 256 MiB | 31 | 10 | 9 (18%) | 40.6 pts |
+| 12M | 1 GiB | 32 | 10 | 8 (16%) | 38.6 pts |
+| 48M | 4 GiB | 34 | 10 | 6 (12%) | 34.6 pts |
+
+**The slope is unchanged. 0.817 per fourfold step against the old 0.804** —
+0.889 then 0.750, and at n=50 those two steps are two and three deals, so the
+difference from the old figure is noise. The dominance did not change the rate
+at which budget buys verdicts; it lowered the curve. This is the second time a
+large improvement has moved the curve down and left the slope alone, the table
+rewrite of 2026-09-13 being the first, and it is now the expected shape rather
+than a surprise.
+
+**What that is worth, and it is a great deal.** Reaching 5% unknown from 12%
+needs 4.3 further fourfold steps, about **400x the 48M budget, 1.9x10^10 nodes
+per deal**. The old sweep put the same gate at 4x10^4 times *its* 48M budget,
+2x10^12 nodes per deal. Two orders of magnitude closer for one dominance. The 1%
+publishing gate needs 2.4x10^7 times the 48M budget and is not worth costing.
+
+**But the wall has changed kind, and this is the finding.** At the 176k nodes
+per second measured here, 1.9x10^10 nodes is 33 CPU-hours for one hard deal and
+about 4.4 CPU-days for a 50-deal set — extrapolating total nodes, which grow as
+budget^0.862 across this sweep, not as the budget. Roughly 88 CPU-days for a
+thousand deals, three weeks of wall clock at four workers. That is large but it
+is no longer absurd; time is not what rules it out.
+
+**Memory is.** At the protocol this sweep uses, a 1.9x10^10-node budget wants
+1.1x10^11 slots, **1.7 TB of table per worker**. Run it at 4 GiB instead and the
+level is not on this curve at all: the table holds 2.7x10^8 slots, the search
+would be evicting by a factor of seventy, and the sweep would be measuring table
+pressure — which is exactly what the protocol exists to exclude, and which
+2026-09-15 recorded as costing re-expansions in both directions. **So the
+extrapolation breaks its own conditions long before it reaches the gate.** The
+honest statement is not "400x the budget reaches 5%"; it is that on affordable
+memory nothing on this curve is measurable much past 10^9 nodes per deal, and
+the gate sits an order of magnitude beyond that.
+
+**And this sweep was already unaffordable on the box it is meant for.** The 48M
+level needs a 4 GiB table per worker; fritter.lol has about 4.9 GiB available in
+total. It ran here, on a 15 GiB container, at two workers. A budget-led route to
+the gate would need the machine before it needed the patience.
+
+**No verdict contradicted and none regressed**, in either direction, across all
+three levels. Every unknown at every level was stopped by the node budget; the
+stack guard was never reached. Proven-unsolvable held at 10 of 50 throughout —
+still 20%, still above Klondike's true 18.06% ceiling, still inside the Wilson
+interval at n=50 and still unable to discriminate until n=1000. That warning
+from 2026-09-14 stands unchanged.
+
+**Gypsy, the same three levels, both arms**, table and worker counts as above.
+Raw results in `docs/results/gypsy-both-{3M,12M}-50deals-splitrun.jsonl`, with
+the recorded 5M run shown for continuity.
+
+| Budget | restricted | full | full arm's own wins |
+|---|---|---|---|
+| 3M | 25 solvable, 25 unknown | 26, 24 | 1 |
+| 5M | 28, 22 | 29, 21 | 1 |
+| 12M | 31, 19 | 31, 19 | **0** |
+
+**The full arm still resolves nothing it is asked to search.** The zero at 12M is
+not a regression and the ones above it are not progress: under `--both-arms` the
+restricted arm goes first and its wins are carried, so the full arm only ever
+searches the deals the restricted arm failed. Seed 15 — the one deal the full
+arm has ever cracked by itself — is solved by the restricted arm at 12M, so the
+full arm never saw it. On the 19 deals it did search at 12M it spent every node
+of its budget, 228M in total, and decided none of them. A fourfold budget step
+has never yet taken a deal off that list.
+
+**Zero Gypsy deals are proven unsolvable at any budget, in either arm.** That is
+the same hole 2026-09-15 recorded: the Gypsy set cannot catch a dominance that
+discards a winning line, because it proves nothing in the direction that error
+shows up in. Klondike remains the only set with teeth.
+
+**What this settles.** Budget is not a route to the gate, and it is not a route
+to the headline figure either. The 0.804 slope should not be quoted again; the
+0.817 that replaces it says the same thing, from a curve that is two orders of
+magnitude lower and against a ceiling that is now memory rather than time.
+Dominances remain the critical path, exactly as 2026-09-12 set it and for the
+third time with a different reason.

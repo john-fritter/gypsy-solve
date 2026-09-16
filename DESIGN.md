@@ -379,10 +379,11 @@ foundations being irremovable — and neither is to be assumed.
 
 **Also open, and not a dominance:** in *Klondike's* full arm the wins are found
 either almost instantly or at enormous cost — twelve of 29 under 500 nodes,
-median 12,696, then a tail to 29.8M, while the eleven unknowns each burn 48M.
+median 12,696, then a tail to 29.8M, while the unknowns — eleven then, six on
+the current search — each burn the whole 48M.
 That is the profile of a search committed to the wrong subtree near the root
 rather than one facing a graph slightly too large, and it is consistent with
-the 0.804 slope. If it holds up, randomised restarts under a fixed total budget
+the slope surviving every improvement to the search. If it holds up, randomised restarts under a fixed total budget
 are a lever that is not on that curve, and they cost nothing in rigour: a
 restart phase can only turn `unknown` into `solvable`, never claim
 `unsolvable`. Worth testing on the eleven unknown deals for the price of one
@@ -426,21 +427,30 @@ rather than re-deriving:
 
 ### Do not run a Gypsy batch yet
 
-The Klondike unknown bucket stands at **18% on 50 deals at a 3M budget**
-(2026-09-16, split-run dominance). The run of it: 40% at 3M on 2026-09-13, 34%
-once the table probed, 22% at 3M's *sixteenfold* budget of 48M — and now 18% at
-3M again. While it is anywhere near this large the validation bracket spans tens
-of points, which is consistent with a correct search and cannot distinguish one
-from a search that misses wins systematically. It is 40.6 points wide today,
-against 65.8 before.
+The Klondike unknown bucket stands at **18% on 50 deals at a 3M budget**, and
+**12% at 48M** (2026-09-16, split-run dominance). The run of it: 40% at 3M on
+2026-09-13, 34% once the table probed, 22% at 3M's *sixteenfold* budget of 48M —
+and now 18% at 3M again, 12% at 48M. While it is anywhere near this large the
+validation bracket spans tens of points, which is consistent with a correct
+search and cannot distinguish one from a search that misses wins systematically.
+It is 40.6 points wide at 3M and 34.6 at 48M, against 65.8 before.
 
 **Budget will not close it; a dominance just did more than 16x the budget.**
-Swept at 3M, 12M and 48M, the bucket fell by a factor of about 0.804 per
-fourfold step, and the slope did not change when the table was fixed — the curve
-moved down, not round. Reaching the 5% gate that way needed roughly 10^4 times
-the budget. One dominance then beat the whole 3M-to-48M sweep at the original
-budget. That is the confirmation the route is dominances, and the sweep should
-be re-run on the current search before anyone plans around the old slope.
+Re-swept on the current search at 3M, 12M and 48M (2026-09-16): 18%, 16%, 12%
+unknown, a factor of **0.817 per fourfold step** against the 0.804 measured
+before either dominance existed. The slope has now survived two large
+improvements unchanged — the curve moves down, not round. What the dominance
+bought is height, and it is worth two orders of magnitude: the 5% gate is 400x
+the 48M budget away, 1.9x10^10 nodes per deal, where the old curve put it at
+4x10^4 times and 2x10^12.
+
+**Still out of reach, and the binding constraint is now memory rather than
+time.** 88 CPU-days would buy a thousand deals at that budget; a table sized to
+it at this sweep's own protocol is 1.7 TB per worker. At any affordable table
+the level stops being a measurement of budget and becomes one of eviction, so
+the extrapolation fails its own conditions before the gate: nothing on this
+curve is measurable much past 10^9 nodes per deal. The route is dominances, for
+the third time and now for a third reason.
 
 Two thresholds, and they are different:
 
