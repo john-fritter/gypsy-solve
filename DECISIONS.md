@@ -2117,3 +2117,93 @@ thresholds.** Strengthening the restricted arm with the worry-back disjunct
 gains nothing, because (A) is exactly the no-worry-back condition already
 shipped and the worry-back form only adds (B) and (C) on top. The restricted
 arm already forces everything this rule would.
+
+## 2026-09-16 — Randomised restarts: worth four times the budget on Gypsy, worth nothing on Klondike
+
+**Status:** firm. `--restarts k` ships, defaulting to 1. The default is 1 and not
+more because the right number is not the same for both games, and this entry is
+the measurement that says so.
+
+**Why it was tried.** Two things this session pointed the same way. The budget
+re-sweep put the slope at 0.817 per fourfold step and showed it surviving every
+improvement to the search, so compute is not the route. And seed 15 — the one
+deal the Gypsy full arm had ever solved by itself — turned out to have been
+found by a **68,592-node first descent on a 38,068-move line**, which is not
+search strength, it is walking into a win. `DESIGN.md` had already named
+restarts as the lever off that curve and nobody had tested it.
+
+**What it is.** The budget is cut into *k* searches under different move
+orderings, stopping at the first that decides the deal. The salt goes through
+the `Game` trait, because ordering is the game's business and the batch shares
+one game across workers; each game shuffles *within* the bands it already sorts
+into, seeded from the position key, so the order is a function of where the
+search is rather than how it got there. Salt zero runs first, so `--restarts 1`
+is exactly the old search and reproduces the recorded 3M Klondike run to the
+node.
+
+**It costs nothing in rigour.** Each restart is a whole search. A win is
+replayed from the deal before it is believed. `Unsolvable` is claimed only by a
+slice that exhausted the reachable game without touching a limit, which is a
+proof whatever ordering produced it. **A restart can turn `unknown` into a
+decision and can never turn a decision into anything else.**
+
+**Gypsy, 50 deals, both arms, table 256 MiB.** Unknowns out of 50 per arm.
+
+| Policy | restricted | full | decided by a restart | nodes |
+|---|---|---|---|---|
+| 3M, one run | 25 | 24 | — | 155M |
+| 6M, one run | 20 | 20 | — | 272M |
+| 6M as 2 x 3M | 15 | 15 | 10 | 223M |
+| 12M, one run | 19 | 19 | — | 499M |
+| 12M as 4 x 3M | 11 | 10 | 15 | 338M |
+| **12M as 8 x 1.5M** | **6** | **6** | 19 | 229M |
+| 12M as 24 x 500k | 6 | 6 | 26 | 195M |
+| 24M as 8 x 3M | 6 | 6 | 19 | 436M |
+| **48M as 32 x 1.5M** | **4** | **4** | 21 | 531M |
+| 48M, one run | 12 | 12 | — | 1,375M |
+
+**Twelve unknown becomes four at the same budget, for a third of the nodes.**
+Restarts at 12M beat a single run at 48M on both arms — the lever is worth about
+four times the budget, and it is worth it in wall clock too, because a deal that
+a slice wins stops there. Nothing was contradicted or regressed anywhere in the
+table except where noted below.
+
+**Slice size matters and 1.5M is about right at these budgets.** Eight slices
+beat four at 12M; twenty-four slices of 500k resolve the same six but lose seed
+34, a win that needs a longer dig than a 500k slice allows, and gain another in
+its place. Below about a million the slices stop being long enough to reach a
+Gypsy win at all.
+
+**Klondike gains nothing, and at finer slices it loses.** 12M as 8 x 1.5M:
+31 solvable, 9 unsolvable, 10 unknown, against 32/10/8 for one run. Seed 13's
+refutation needs more than 1.5M contiguous nodes to exhaust, and no slicing can
+give it that. At a fixed total budget of 3M the loss is worse — 31 wins become
+29 at k=4 and 27 at k=16. Across every Klondike run here **one restart decided
+one deal**, against 19 to 26 per Gypsy run.
+
+**Why the two games differ, and it is the useful part.** Gypsy's winning lines
+run 1,301 to 99,982 moves; Klondike's run 136 to 467. A Gypsy win is a plunge
+the search either walks into or misses, which is the heavy-tailed profile
+restarts exist for. Klondike's unknown deals are not committed to the wrong
+subtree — they are simply large, and its decided deals include ten refutations,
+which are exactly what restarts cannot help: exhausting a game needs contiguous
+budget. **`DESIGN.md`'s hypothesis was right about Gypsy and wrong about
+Klondike, and it was stated about Klondike.**
+
+**Consequence for the validation gate: it does not move.** The 5% gate is
+defined on Klondike, restarts do nothing for Klondike, and the bracket is
+unchanged. What moved is the arm that publishes.
+
+**And a caveat that comes with a per-game policy.** If Gypsy production runs use
+restarts and Klondike validation does not, the validated configuration is not
+the one that publishes, which is the thing `CLAUDE.md` built the whole Klondike
+arm to avoid. The answer is to run the thousand-deal validation under the same
+policy and report both numbers, accepting that Klondike's bucket is slightly
+larger with restarts on. That is a cost worth paying to validate what is
+actually run; it is not a reason to turn the lever off for Gypsy.
+
+**What this re-opens.** The two-deck safe-foundation rule was held back earlier
+today for exactly one reason: it lost seed 15, a lucky descent. Under restarts
+that is no longer the test — a rule can no longer be judged by whether it
+preserves one first descent. Re-measuring it with restarts on is the obvious
+next piece of work, and it is now a fair test rather than a lottery.
