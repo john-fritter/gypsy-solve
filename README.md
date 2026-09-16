@@ -101,8 +101,30 @@ The second rule is the only one the **full** game has, and it is what took the
 Gypsy worry-back arm from resolving nothing to resolving most of a 50-deal
 sample. Hard deals still return `unknown`.
 
+Both rules apply at every position, so the pair needs an argument of its own and
+not just one per rule. It is on `Gypsy::legal_actions`: an induction on line
+length, which works because exactly one of the two rules governs any one
+position and neither rewrite lengthens a line.
+
 `cargo run --release --bin branching` reports how much of move generation each
-kind of move accounts for, which is how that rule was sized before it was built.
+kind of move accounts for, which is how the split-run rule was sized before it
+was built.
+
+`cargo run --release --bin compose` runs that composition argument instead of
+restating it. Given a recorded winning line it applies whichever rewrite each
+position calls for, and checks that what comes out replays to a win, is offered
+by the generator at every position, and is no longer than the line that went in:
+
+```
+compose --results docs/results/gypsy-nwb-5M-depth-sweep.jsonl --arm both
+compose --seed 15 --moves-file line.txt --arm full --delay-foundations
+```
+
+`--delay-foundations` pushes every foundation play as late as it will commute
+before the construction runs. A line from the solver already forces its safe
+cards up, so without it the forcing rule's rewrite is never exercised. Set
+`COMPOSE_TRACE=1` for the step-by-step. `docs/results/gypsy-composition-construction.jsonl`
+is the recorded run.
 
 ## Restarts
 

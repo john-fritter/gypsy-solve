@@ -2267,3 +2267,116 @@ theorem for exactly this pair and it is single-deck like the rest of Appendix
 B.1. Every number above was measured with both rules on, so the evidence covers
 the pair; the argument does not. If a later run contradicts a verdict, that
 composition is where to look, after the gates.
+
+## 2026-09-16 — The two dominances compose, by an induction on line length that can be run
+
+**Status:** firm. Closes the "Still owed" paragraph of *The two-deck
+safe-foundation rule ships, because restarts made the test fair* (earlier
+today), and the same paragraph in the entry it reversed.
+
+Nothing about either shipped rule changes. What changes is that the pair now
+has an argument, and the argument is a program: `cli/src/bin/compose.rs` runs
+it against recorded winning lines.
+
+**What was owed.** Both rules apply at every position and each is proved alone
+against the rules-legal game. Composing two such proofs is not free: rule one's
+rewrite yields a line rule one offers, rule two's rewrite of *that* line can
+hand back a move rule one does not, and the two can pass the line back and
+forth without settling. Blake & Gent have a compatibility theorem for exactly
+this pair, and it is single-deck like the rest of Appendix B.1.
+
+**The argument, and it is short because the rules never meet.** Three facts:
+
+1. Each rewrite asks only that the line it is given be rules-legal. Neither
+   asks that the line already comply with the other rule.
+2. Neither rewrite lengthens a line.
+3. **Exactly one rule governs each position.** Where a move is forced the
+   filter is not consulted, and the forced move is one the filter would have
+   kept — it cuts tableau moves and a forced move is a foundation play. So the
+   two rules commute and no position is restricted by both.
+
+Then induct on the length `n` of a winning line `L` from a position `P`. At
+`n = 0` the position is won. Where a move `f` is forced: if `L` opens with `f`
+its tail is a winning line of length `n-1` and the hypothesis closes it;
+otherwise the deferral gives a winning line from `P`, no longer, that does.
+Where nothing is forced: if `L`'s first move is not cut it is offered and the
+hypothesis closes the tail; otherwise the deletion gives a winning line from
+`P`, no longer, with one cut move fewer, and that repeats until the first move
+is not cut. Every branch appeals to the hypothesis at `n-1`, so it is an
+induction and not a race between two rewrites.
+
+**Running it found something the single-rule proof states loosely.** "Take a
+winning line with as few cut moves as possible" quietly rules out a line that
+shuffles a pile between two columns and back. Mirror such a line move for move
+and the copy hands the deleted move back as its repair, reproducing the line it
+was given: the rewrite is the identity and nothing terminates. On seed 9 the
+construction sat in exactly that loop — a 4-card run crossing between two
+columns eight times — until the deletion's step was stated as **mirror, but
+converge the moment the recorded line catches up with the copy**. The repair is
+then owed only where the line plays a slot card up, which is where the proof
+says it is owed. The theorem is unaffected, since a line with a redundant
+shuffle is not minimal; the *construction* needs the step, and so does an
+induction that has to work on any line rather than a chosen one.
+
+**What the construction is.** Two lines stepped side by side, the recorded one
+and the copy being built. After every move the copy is checked against the
+invariant the proof claims for it — for the deferral, the recorded position
+with some cards played up early; for the deletion, the recorded position with
+the piles on two slots exchanged. The copy's move is *chosen* from the proof's
+cases and only accepted if the invariant survives it, so the invariant is
+stated once and every step has to satisfy it. Three independent checks on the
+output: it replays from the deal to a win, every move of it is offered by the
+composed generator at the position it is played from, and it is no longer than
+the line that went in.
+
+**Run, on `docs/results/gypsy-composition-construction.jsonl`.**
+
+| Input | lines | moves in | deferrals | deletions | closed |
+|---|---|---|---|---|---|
+| recorded pre-dominance lines, restricted arm | 3 | 3,620 | 3 | 494 | 3 |
+| recorded pre-dominance lines, full arm | 3 | 3,620 | 6 | 494 | 3 |
+| today's lines, foundations delayed, restricted arm | 18 | 76,874 | 195 | 28 | 18 |
+| today's lines, foundations delayed, full arm | 20 | 77,818 | 204 | 33 | 20 |
+| **all** | **44** | **161,932** | **408** | **1,049** | **44** |
+
+**All 44 closed, none lengthened, 10 came out shorter** — the longest input
+46,026 moves. 20 deals. The recorded lines are the project's only Gypsy winning
+lines from before either rule existed (`gypsy-nwb-5M-depth-sweep.jsonl`), which
+is why they carry almost all of the deletions.
+
+**The delay transform is why the deferrals are there at all.** A line from
+today's solver already forces its safe cards up, so it violates the forcing
+rule nowhere and exercises the deferral nowhere. Two moves that commute can be
+swapped without touching the rest of the line, so every foundation play is
+pushed as late as it will commute; what comes out is the same win, still
+rules-legal, playing its safe cards up as late as it can. That is the line the
+deferral is for, and it is what takes the deferral count from 9 across the
+whole set to 408.
+
+**What is pinned in code.** `the_two_rules_commute` walks both arms and checks
+that forcing-then-filtering and filtering-then-forcing give the same actions,
+and that the filter never removes a forced move;
+`a_forced_move_is_one_the_split_run_filter_keeps` checks fact 3 directly over
+walked positions. A filter that grew to cut a foundation play, or a forcing
+rule that started reading the move list, now fails a test rather than quietly
+making the early return in `legal_actions` a third dominance nobody argued for.
+
+**Three things this does not claim.**
+
+- It is not a proof that either rule is sound; it composes the two proofs that
+  already exist and inherits whatever they are worth.
+- One branch of the deferral is unexercised: a worry-back the copy cannot
+  mirror, because the card it wants is buried under a card the copy played up
+  early. The branch is there and is guarded by a check that the card can host
+  nothing, but no line the project has reaches it. If a verdict is ever
+  contradicted, that branch is the first place to look after the gates.
+- Klondike runs the same pair and gets no argument here. It does not need one
+  from us: it is single-deck, which is exactly where Blake & Gent's
+  compatibility theorem applies as published.
+
+**Also settled in passing, and it is not a dominance.** A rules-legal line can
+name the higher of a suit's two foundation slots where the generator names the
+lower. That is the slot deduplication of 2026-09-09, not a cut, so the
+construction relabels the two slots through the rest of the line and carries
+on — sound precisely because two slots showing the same rank hold identical
+piles. It fired 7 times in the run and is counted separately from the rewrites.

@@ -147,6 +147,22 @@ impl Gypsy {
             options,
         }
     }
+
+    /// The move this position *forces*, if any.
+    ///
+    /// `legal_actions` already collapses a forced position to one action, but
+    /// a position can hold exactly one action without being forced, and the
+    /// two cases are rewritten differently. The composition construction
+    /// (`cli/src/bin/compose.rs`) has to tell them apart, and asking here
+    /// keeps the forcing rule in one place rather than restating it in a
+    /// second binary.
+    pub fn forced_action(&self, position: &State) -> Option<Move> {
+        if self.options.worry_back {
+            forced_foundation_play(position)
+        } else {
+            safe_autoplay(position)
+        }
+    }
 }
 
 /// True when no card can ever want to sit on this one again.
@@ -539,15 +555,87 @@ impl Game for Gypsy {
     /// argument nowhere needs foundations to be irremovable. Solvitaire ships
     /// the same rule for Klondike's published worry-back variant.
     ///
+    /// # The two rules together
+    ///
+    /// Both rules apply at every position, and each proof above is a proof of
+    /// its own rule against the *rules-legal* game. That is not the same as a
+    /// proof of the pair. Blake & Gent have a compatibility theorem for
+    /// exactly this pair — safe foundation moves with the incomplete-pile
+    /// rule — and it is single-deck like the rest of Appendix B.1, so for two
+    /// decks the argument is ours.
+    ///
+    /// **Why it is not free.** Each proof rewrites a whole winning line. Rule
+    /// one's rewrite yields a line rule one offers; rule two's rewrite of that
+    /// line can hand back a move rule one does not offer, and the two can pass
+    /// the line back and forth without ever settling. A compatibility theorem
+    /// is what closes that loop.
+    ///
+    /// **Why it is free here.** Three facts, and the third is the one that
+    /// does the work:
+    ///
+    /// 1. Each rewrite asks only that the line it is given be rules-legal. It
+    ///    never asks that the line already comply with the other rule.
+    /// 2. Neither rewrite lengthens the line. The deferral moves one play to
+    ///    the front and deletes it from where it was; the deletion deletes a
+    ///    move and hands it back at most once.
+    /// 3. **Exactly one rule governs each position.** Where a move is forced
+    ///    the filter is not consulted, and the move that is forced is one the
+    ///    filter would have kept — it cuts tableau moves and a forced move is
+    ///    a foundation play. So the two rules commute, and a position is never
+    ///    restricted by both. Pinned by `the_two_rules_commute`.
+    ///
+    /// **The induction**, on the length `n` of a winning line `L` from a
+    /// position `P`. It is not a fixed point of two rewrites; it is one
+    /// rewrite per position, descending.
+    ///
+    /// *n = 0.* `P` is won and the empty line is offered.
+    ///
+    /// *A move is forced at `P`, and it is `f`.* If `L` opens with `f`, its
+    /// tail is a winning line of length `n-1` from the child and the induction
+    /// hypothesis gives a compliant one. If it does not, the deferral above
+    /// gives a winning line from `P`, no longer than `L`, that does — and its
+    /// tail is at most `n-1` long.
+    ///
+    /// *Nothing is forced at `P`.* If `L`'s first move is not cut it is
+    /// offered, and the hypothesis closes the tail. If it is cut, the deletion
+    /// above gives a winning line from `P`, no longer, with one cut move
+    /// fewer: every mirrored move is cut exactly when its original was, and
+    /// the move handed back is not cut. The new first move may be cut in its
+    /// turn, so this repeats — but the count of cut moves falls by one each
+    /// time, so after finitely many the first move is not cut, and the
+    /// hypothesis closes the tail.
+    ///
+    /// Every branch appeals to the hypothesis at `n-1`, which is what makes
+    /// the composition an induction rather than a race between two rewrites.
+    ///
+    /// **The deletion's step needs one thing the single-rule proof states
+    /// loosely**, and running the construction is what found it. "As few cut
+    /// moves as possible" quietly rules out a line that shuffles a pile
+    /// between two columns and back. Mirror such a line move for move and the
+    /// copy hands the deleted move back as its repair, reproducing the line it
+    /// was given: the rewrite is the identity and nothing terminates. The step
+    /// is therefore: mirror, but **converge the moment the recorded line
+    /// catches up with the copy** — where the line returns a pile to the slot
+    /// the copy already holds it on, the copy sits the move out and the two
+    /// lines are one from there. The repair is then owed only where the line
+    /// plays a slot card up, which is where the proof says it is owed.
+    ///
+    /// **The table is untouched.** Both rules read the position and nothing
+    /// else, so their composition does too: two routes to a position generate
+    /// the same children, and the expanded-set induction (`DECISIONS.md`,
+    /// 2026-09-13) still holds.
+    ///
+    /// **And it is run, not only argued.** `cli/src/bin/compose.rs` is this
+    /// induction as a program: it walks a recorded winning line, applies
+    /// whichever rewrite each position calls for, and checks that what comes
+    /// out replays to a win, is offered at every position, and is no longer.
+    /// Each rewrite simulates the proof's own construction and checks its
+    /// invariant after every move. See `DECISIONS.md`, 2026-09-16.
+    ///
     fn legal_actions(&self, position: &State, salt: u64) -> Vec<Move> {
         // A forced play is forced under every ordering, so this comes before
         // any salt is applied.
-        let forced = if self.options.worry_back {
-            forced_foundation_play(position)
-        } else {
-            safe_autoplay(position)
-        };
-        if let Some(forced) = forced {
+        if let Some(forced) = self.forced_action(position) {
             return vec![forced];
         }
 
@@ -1055,6 +1143,104 @@ mod tests {
         assert_eq!(
             differing, 8,
             "a deal that gave every column the same card would leave the exchange intact"
+        );
+    }
+
+    /// The composition's one interaction point, pinned.
+    ///
+    /// Where the forcing rule fires, `legal_actions` returns that move and
+    /// never consults the split-run filter. That is sound only because the
+    /// filter would have kept the move — it cuts tableau moves and a forced
+    /// move is a foundation play — and the induction that composes the two
+    /// rules depends on it: each position is governed by one rule, not both.
+    /// A filter that grew to cut a foundation play would turn the early
+    /// return into a third dominance nobody argued for, and would fail here.
+    #[test]
+    fn a_forced_move_is_one_the_split_run_filter_keeps() {
+        let mut forced_positions = 0;
+
+        for options in [MoveOptions::NO_WORRY_BACK, MoveOptions::ALL] {
+            let game = Gypsy::new(options);
+            for seed in 0..6 {
+                for state in descend(&game, seed, 4_000) {
+                    let Some(forced) = game.forced_action(&state) else {
+                        continue;
+                    };
+                    forced_positions += 1;
+                    assert!(
+                        matches!(forced, Move::ToFoundation { .. }),
+                        "{forced} is forced but is not a foundation play"
+                    );
+                    assert!(
+                        !splits_a_run_for_nothing(&state, forced),
+                        "{forced} is forced and the filter would have cut it"
+                    );
+                    assert!(
+                        state.legal_moves(options).contains(&forced),
+                        "{forced} is forced and is not a legal move"
+                    );
+                }
+            }
+        }
+
+        assert!(
+            forced_positions > 100,
+            "only {forced_positions} forced positions walked; the test proves nothing"
+        );
+    }
+
+    /// The two rules commute, and one of them governs each position.
+    ///
+    /// `legal_actions` forces first and filters second. Filtering first and
+    /// forcing second gives the same actions: the filter never removes the
+    /// move the forcing rule picks, and filtering cannot change what is
+    /// forced, because the forcing rule reads the position rather than the
+    /// move list. So every position is governed by one rule and not by both
+    /// in some order — which is what lets the composition argument rewrite a
+    /// line one head move at a time, applying whichever rewrite that position
+    /// calls for. An order that mattered would be a third thing to prove.
+    #[test]
+    fn the_two_rules_commute() {
+        let mut forced_positions = 0;
+        let mut filtered_positions = 0;
+
+        for options in [MoveOptions::NO_WORRY_BACK, MoveOptions::ALL] {
+            let game = Gypsy::new(options);
+            for seed in 0..6 {
+                for state in descend(&game, seed, 2_000) {
+                    let mut forced_then_filtered = game.legal_actions(&state, 0);
+
+                    let mut filtered = state.legal_moves(options);
+                    filtered.retain(|mv| !splits_a_run_for_nothing(&state, *mv));
+                    let mut filtered_then_forced = match game.forced_action(&state) {
+                        Some(forced) => {
+                            forced_positions += 1;
+                            assert!(
+                                filtered.contains(&forced),
+                                "the filter removed the forced move {forced}"
+                            );
+                            vec![forced]
+                        }
+                        None => {
+                            filtered_positions += 1;
+                            filtered
+                        }
+                    };
+
+                    forced_then_filtered.sort();
+                    filtered_then_forced.sort();
+                    assert_eq!(
+                        forced_then_filtered, filtered_then_forced,
+                        "the two rules do not commute in {state}"
+                    );
+                }
+            }
+        }
+
+        assert!(
+            forced_positions > 100 && filtered_positions > 100,
+            "{forced_positions} forced and {filtered_positions} filtered positions \
+             walked; the test proves nothing"
         );
     }
 
