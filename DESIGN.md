@@ -261,6 +261,12 @@ budget-exhausted.
       one policy for single cards and groups that the theorem requires —
       standard Spider fails exactly there. Two gates of our own for Gypsy, an
       exhausted stock and a non-empty destination; Klondike needs neither.
+      **Both gates proved 2026-09-16**, by arguing Gypsy directly rather than
+      re-running the theorem: the card a cut move exposes and the card it lands
+      on are the same rank and colour, so a winning line that makes the move
+      can be rewritten into one that defers it to the moment the exposed card
+      is played up. An empty column has no such twin, and the stock deal is
+      addressed by column — which is what the gates are for.
 
       Measured before it was built: it removes 42% of the full arm's
       generated moves. Klondike's unknown bucket fell 34% to 18% at 3M,

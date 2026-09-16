@@ -269,7 +269,7 @@ impl Game for Gypsy {
     /// promises is one the search can no longer find. This is the shape of
     /// error `CLAUDE.md` warns about and Solvitaire's authors hit twice.
     ///
-    /// # Splitting a built run for nothing, and the two gates
+    /// # Splitting a built run for nothing, and why the two gates hold
     ///
     /// The second dominance, and the first one the *full* game has. A move
     /// carrying a strict suffix of a built run is not generated when the card
@@ -298,42 +298,107 @@ impl Game for Gypsy {
     /// does. Standard Spider fails precisely here, its singles moving by any
     /// suit while its groups must share one, and the paper excludes it by name.
     ///
-    /// **Gate 1: the stock must be empty.** The proof rewrites a winning line
-    /// by deleting, swapping and redirecting moves, which needs a move to be
-    /// swappable past its neighbour when the two are unrelated. Gypsy's stock
-    /// deal is never unrelated: it lands a card on *every* column, so a
-    /// tableau move swapped past one finds the run it meant to carry buried,
-    /// and the rewrite is not legal. That is the hypothesis about move order,
-    /// failing. Gated on an empty stock it cannot fail, because nothing ever
-    /// returns a card to the stock: from such a position no continuation
-    /// contains a deal at all, and the remaining game is an instance of
-    /// exactly the game the theorem covers. The restriction then preserves
-    /// winnability *of that position*, which is all the search needs, since
-    /// positions with cards still to deal are left alone.
+    /// # The proof, for Gypsy, with both gates in it
     ///
-    /// **Gate 2: the destination must not be an empty column.** Gypsy admits
-    /// any card to an empty column. The proof's critical step replaces a move
-    /// onto one card with the same move onto another, and argues it stays
-    /// legal because the two cards accept the same set — an argument about
-    /// cards, which an empty column is not. Restricting only moves that land
-    /// on a card means the last non-compliant move the proof rewrites always
-    /// has a card as its destination, and so does the move onto the pile it
-    /// vacated, since a partial move leaves that pile non-empty. Moves onto an
-    /// empty column are never restricted, so they never appear as the move
-    /// being rewritten.
+    /// Theorem 4 is a statement about a whole instance; this is a filter on
+    /// move generation, applied at some positions and not others, under a
+    /// transposition table. Rather than inherit a case analysis across that
+    /// gap, the rule is proved here directly, in the shape of the safe
+    /// autoplay proof above: take a winning line that makes the move, and
+    /// build one that does not.
     ///
-    /// **What the gates cost**, measured before either was written:
-    /// 49.7% of the full arm's generated moves split a run for nothing, and
-    /// 42.1% still do with both gates applied. See `DECISIONS.md`.
+    /// **The twin, which is the whole engine of it.** Write the cut move as
+    /// carrying a group `g` off column `i` onto the top card `d` of column
+    /// `j`, and let `x` be the card left directly under `g`. Both `x` and `d`
+    /// carry `g`'s bottom card, so both are one rank above it and of the
+    /// opposite colour: **`x` and `d` have the same rank and the same
+    /// colour**, and so accept exactly the same piles, building testing rank
+    /// and colour and nothing else. They are usually different *suits*, so
+    /// they are not interchangeable for a foundation play, and that one
+    /// asymmetry is what the rest of the proof is about.
+    ///
+    /// **The copy.** Let `L` be a winning line from this position `Q` with as
+    /// few cut moves in it as possible, and suppose it opens with this one,
+    /// `m`. Delete `m` and follow the rest of `L`. Every position the copy
+    /// reaches is the real one with the contents of two *slots* exchanged —
+    /// a slot being a card with the pile built on it — starting with `g` on
+    /// `x` in the copy and on `d` in the real line. Both slots accept both
+    /// piles, by the twin property, so the exchange is a position either way.
+    /// The copy mirrors each move by playing the same cards onto the same
+    /// card, the two slots standing in for each other:
+    ///
+    /// - cards taken from inside a pile, or the slot card lifted with its
+    ///   pile, or anything not in either pile: the same move, expose the same
+    ///   card;
+    /// - the whole of a pile lifted off its slot: the copy lifts *its* slot's
+    ///   pile instead, onto the same destination, which is legal because both
+    ///   piles fit both slots — and this again exposes the same slot card, the
+    ///   exchange carrying over to the destination and the other slot;
+    /// - a card played onto a bare slot: bare in one line means bare in the
+    ///   other's twin, so the copy plays it onto the twin, which accepts it.
+    ///
+    /// **Every mirrored move therefore exposes the card its original exposed,
+    /// from the same kind of destination — so it is cut exactly when its
+    /// original was.** That is the step the whole termination argument rests
+    /// on.
+    ///
+    /// **The deleted move comes back once, where it is owed.** What the copy
+    /// cannot mirror is a foundation play of a slot card, which needs the
+    /// suit. `L` plays `x` up only with `x` bare, which means the pile on `d`
+    /// is empty, which means in the copy `d` is bare and `x` carries the other
+    /// pile. So the copy plays `m` there — moves that pile onto `d` — and the
+    /// two lines are in the same position from then on, move for move. **That
+    /// deferred `m` is generated in the restricted game**: it lands on a card,
+    /// and the card it exposes is `x`, which is played up on the very next
+    /// move, so `x` has a foundation. The same repair covers a slot column
+    /// emptying in one line and not the other, where the deferred move carries
+    /// a whole column and is never cut for any reason.
+    ///
+    /// So the rewritten line wins, is no longer than `L`, and has one fewer
+    /// cut move — `m` is gone and nothing else changed status. That
+    /// contradicts the choice of `L` unless `L` had none. Hence a winnable
+    /// position with an empty stock has a winning line the restricted
+    /// generator offers, which is what the search needs.
+    ///
+    /// **Gate 2 is the sentence "both slots accept the same piles".** An empty
+    /// column accepts *every* pile and no card does. Land `g` on one and the
+    /// exposed `x` has no twin: the real line may drop a pile into that column
+    /// that the copy, holding a card there, cannot legally match, and the
+    /// mirror stops. So moves onto an empty column are not cut — which is also
+    /// the move that makes working space, the last thing to take away from a
+    /// game this cramped.
+    ///
+    /// **Gate 1 is that the stock deal is addressed by column.** It lands one
+    /// card on *every* column, and the two exchanged piles are in different
+    /// columns, so a deal adds a different card to each and the exchange is
+    /// destroyed — the two lines stop being the same position with two slots
+    /// swapped, and no later move can repair it. A dealt card also need not
+    /// continue a run, so the pile the deferred move meant to carry can be
+    /// buried outright. Gating on an empty stock removes the move entirely:
+    /// **nothing ever returns a card to the stock**, so from an empty-stock
+    /// position every continuation is stock-free, and the set of positions the
+    /// rule fires at is closed under making a move. That closure is what lets
+    /// a per-position filter stand in for a theorem about whole instances —
+    /// the proof above never has to leave the restricted region, and positions
+    /// with cards still to deal keep every move they had.
+    ///
+    /// **And the filter reads the position only.** Whether a move is cut is a
+    /// function of the position — stock empty, destination non-empty, exposed
+    /// card's foundation — and never of the path that reached it, so two
+    /// routes to the same position generate the same children and the
+    /// expanded-set induction (`DECISIONS.md`, 2026-09-13) is untouched. This
+    /// is exactly what a *capped* worry-back arm could not say: worry-backs
+    /// spent is path state, and a table that stores positions forgets it.
     ///
     /// **Why this one survives worry-back when safe autoplay does not.** It
-    /// makes no claim about a card never being wanted again. It says only that
-    /// a run is split to free the card beneath it, and that splitting it to
-    /// free a dead card achieves nothing a later split could not. Worry-back
-    /// adds moves *into* the tableau, which the theorem's hypotheses do not
-    /// restrict, and Solvitaire ships this rule for Klondike with removable
-    /// foundations — the published worry-back variant.
-    ///
+    /// makes no claim about a card never being wanted again, so nothing in it
+    /// has to hold in the future. A worry-back enters the proof only as a card
+    /// placed on a column, which the copy mirrors like any other placement,
+    /// and the deferred move's licence — that `x` has a foundation — is read
+    /// at the position where that move is played, not promised in advance.
+    /// That answers the second hypothesis left open on 2026-09-15: the
+    /// argument nowhere needs foundations to be irremovable. Solvitaire ships
+    /// the same rule for Klondike's published worry-back variant.
     ///
     fn legal_actions(&self, position: &State) -> Vec<Move> {
         if !self.options.worry_back {
@@ -382,7 +447,7 @@ impl Game for Gypsy {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use gypsy_core::state::FOUNDATIONS;
+    use gypsy_core::state::{COLUMNS, FOUNDATIONS};
     use gypsy_core::Move;
 
     /// Nothing stacks on an ace, and only an ace stacks on a two.
@@ -595,6 +660,171 @@ mod tests {
                 }
             }
         }
+    }
+
+    /// The step the split-run proof turns on. The card a cut move would
+    /// expose and the card it would land on both carry the moved group's
+    /// bottom card, so they are the same rank and the same colour and accept
+    /// exactly the same piles. Everything else in that proof is bookkeeping
+    /// around this one fact.
+    #[test]
+    fn a_cut_move_exposes_a_twin_of_the_card_it_lands_on() {
+        let game = Gypsy::new(MoveOptions::ALL);
+        let mut fired = 0;
+
+        for seed in 0..6 {
+            for state in descend(&game, seed, 4_000) {
+                for mv in state.legal_moves(MoveOptions::ALL) {
+                    if !splits_a_run_for_nothing(&state, mv) {
+                        continue;
+                    }
+                    let Move::Tableau { from, to, count } = mv else {
+                        unreachable!("only tableau moves are ever cut")
+                    };
+                    let column = &state.columns[from as usize];
+                    let exposed = column.cards()[column.len() - count as usize - 1];
+                    let landed_on = state.columns[to as usize]
+                        .top()
+                        .expect("gate 2 leaves only card destinations");
+                    fired += 1;
+                    assert_eq!(
+                        (exposed.rank(), exposed.is_red()),
+                        (landed_on.rank(), landed_on.is_red()),
+                        "{mv} exposes {exposed} and lands on {landed_on}, which are not twins"
+                    );
+                }
+            }
+        }
+
+        assert!(fired > 0, "the test never met the case it is pinning");
+    }
+
+    /// And twins really are interchangeable as bases: the same cards build on
+    /// them. Cards that are not twins share no base at all, above the aces
+    /// that nothing builds on.
+    #[test]
+    fn twins_accept_the_same_cards_and_non_twins_share_none() {
+        let every: Vec<Card> = (0..CARDS as u8).map(Card::from_index).collect();
+
+        for &base in &every {
+            for &other in &every {
+                let accepts_base: Vec<Card> = every
+                    .iter()
+                    .copied()
+                    .filter(|card| card.stacks_on(base))
+                    .collect();
+                let accepts_other: Vec<Card> = every
+                    .iter()
+                    .copied()
+                    .filter(|card| card.stacks_on(other))
+                    .collect();
+
+                if base.rank() == other.rank() && base.is_red() == other.is_red() {
+                    assert_eq!(accepts_base, accepts_other, "{base} and {other} are twins");
+                } else if base.rank() > 1 && other.rank() > 1 {
+                    assert!(
+                        accepts_base
+                            .iter()
+                            .all(|card| !accepts_other.contains(card)),
+                        "{base} and {other} are not twins and must share no card"
+                    );
+                }
+            }
+        }
+    }
+
+    /// Gate 2, as a fact about the rules rather than about the code: an empty
+    /// column accepts every card there is. That is why it cannot stand in for
+    /// a twin — a line may drop a pile there that a copy holding a card in
+    /// that column could not legally match.
+    #[test]
+    fn an_empty_column_accepts_every_run_on_offer() {
+        let game = Gypsy::new(MoveOptions::ALL);
+        let mut fired = 0;
+
+        for seed in 0..8 {
+            for state in descend(&game, seed, 3_000) {
+                let Some(empty) = state.columns.iter().position(|column| column.is_empty()) else {
+                    continue;
+                };
+                let offered = state.legal_moves(MoveOptions::ALL);
+                for (from, column) in state.columns.iter().enumerate() {
+                    if from == empty || column.is_empty() {
+                        continue;
+                    }
+                    for count in 1..=column.movable_run() {
+                        fired += 1;
+                        assert!(
+                            offered.contains(&Move::Tableau {
+                                from: from as u8,
+                                to: empty as u8,
+                                count: count as u8,
+                            }),
+                            "an empty column must accept every run, and refused {count} \
+                             cards from column {from}"
+                        );
+                    }
+                }
+            }
+        }
+
+        assert!(fired > 0, "the test never met the case it is pinning");
+    }
+
+    /// Gate 1 is sound only because the region it fires in is closed: nothing
+    /// ever puts a card back in the stock, so every continuation of an
+    /// empty-stock position is itself stock-free and the proof never has to
+    /// leave the restricted game.
+    #[test]
+    fn nothing_ever_returns_a_card_to_the_stock() {
+        let game = Gypsy::new(MoveOptions::ALL);
+        let mut with_cards_left = 0;
+
+        for seed in 0..4 {
+            for state in descend(&game, seed, 1_500) {
+                with_cards_left += usize::from(!state.stock.is_empty());
+                for mv in state.legal_moves(MoveOptions::ALL) {
+                    let mut child = state.clone();
+                    child.apply(mv).expect("a generated move is legal");
+                    assert!(
+                        child.stock.len() <= state.stock.len(),
+                        "{mv} put a card back in the stock"
+                    );
+                }
+            }
+        }
+
+        assert!(
+            with_cards_left > 0,
+            "the test never met the case it is pinning"
+        );
+    }
+
+    /// And the reason that gate is needed at all. The deal is addressed by
+    /// column: it lands a *different* card on each one. The proof exchanges
+    /// two piles that sit in different columns, so a deal appends different
+    /// cards to them and the exchange is destroyed rather than carried.
+    #[test]
+    fn a_stock_deal_lands_a_different_card_on_each_column() {
+        let mut differing = 0;
+
+        for seed in 0..8 {
+            let mut state = State::deal(seed);
+            state.apply(Move::Stock).expect("stock deal is legal");
+            let dealt: Vec<Card> = (0..COLUMNS)
+                .map(|column| {
+                    state.columns[column]
+                        .top()
+                        .expect("every column was dealt to")
+                })
+                .collect();
+            differing += usize::from(dealt.iter().any(|card| *card != dealt[0]));
+        }
+
+        assert_eq!(
+            differing, 8,
+            "a deal that gave every column the same card would leave the exchange intact"
+        );
     }
 
     #[test]

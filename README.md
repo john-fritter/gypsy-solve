@@ -85,8 +85,8 @@ it to free a dead card is a shuffle. This is Blake & Gent's Theorem 4, which
 unlike their safe-foundation rule is proved for games with duplicate cards, and
 which reaches Gypsy because any alternating-colour sequence moves as a unit —
 the theorem needs one policy for single cards and for groups. Gypsy gates it on
-an exhausted stock and a non-empty destination, for reasons given on
-`Gypsy::legal_actions`; Klondike needs neither gate.
+an exhausted stock and a non-empty destination, both proved on
+`Gypsy::legal_actions` rather than inherited; Klondike needs neither gate.
 
 The second rule is the only one the **full** game has, and it is what took the
 Gypsy worry-back arm from resolving nothing to resolving most of a 50-deal

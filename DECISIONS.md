@@ -1909,3 +1909,104 @@ to the headline figure either. The 0.804 slope should not be quoted again; the
 magnitude lower and against a ceiling that is now memory rather than time.
 Dominances remain the critical path, exactly as 2026-09-12 set it and for the
 third time with a different reason.
+
+## 2026-09-16 — The two gates are proved, by arguing Gypsy rather than the theorem
+
+**Status:** firm. Closes the "What is still owed" paragraph of *A run is not
+split to expose a dead card* (earlier today), which recorded the gates as
+argued rather than proved.
+
+Nothing about the shipped rule changes. Both games reproduce their recorded 3M
+runs exactly — verdict, nodes and line length on all 50 Klondike deals and all
+100 Gypsy records. What changes is that the cut now has a proof of the kind
+`CLAUDE.md` demands before a dominance goes in, and the search's only full-game
+rule no longer rests on a sketch.
+
+**Why it is proved directly rather than by re-running Theorem 4's case
+analysis.** The theorem is a statement about a whole instance; this is a filter
+on move generation, applied at some positions and not others, under a
+transposition table. Bridging that gap needs an argument about *our* game
+either way, and the papers are not reachable from this session in any case. A
+Gypsy-specific proof is also what the one-implementation constraint wants: the
+rule is ours, so the proof should be.
+
+**The proof, and it is short because one fact carries it.** Write the cut move
+as carrying a group `g` off column `i` onto the top card `d` of column `j`, and
+let `x` be the card left directly under `g`. Both `x` and `d` hold `g`'s bottom
+card, so both are one rank above it and of the opposite colour. **`x` and `d`
+are the same rank and the same colour, so they accept exactly the same piles**
+— building tests rank and colour and nothing else. They are usually different
+suits, so they are *not* interchangeable for a foundation play, and that single
+asymmetry is the whole of the rest.
+
+Take a winning line `L` from the position with as few cut moves as possible and
+suppose it opens with this one. Delete it and follow the rest. Every position
+the copy reaches is the real one with the contents of two slots exchanged — a
+slot being a card and the pile built on it — starting with `g` on `x` in the
+copy and on `d` in the real line. The copy plays the same cards onto the same
+card, the two slots standing in for each other, and the exchange survives every
+move:
+
+- cards taken from inside a pile, the slot card lifted with its pile, or
+  anything not in either pile — the same move, exposing the same card;
+- a whole pile lifted off its slot — the copy lifts *its* slot's pile instead,
+  onto the same destination, legal because both piles fit both slots, and
+  exposing the same slot card; the exchange carries over to the destination;
+- a card placed on a bare slot — bare in one line means the twin is bare in the
+  other, and the twin accepts it.
+
+**Every mirrored move exposes the card its original exposed, from the same kind
+of destination, so it is cut exactly when its original was.** That is what
+makes the rewrite terminate rather than trade one cut move for another.
+
+The one thing the copy cannot mirror is a foundation play of a slot card, which
+needs the suit. `L` plays `x` up only with `x` bare, so the pile on `d` is
+empty, so in the copy `d` is bare and `x` carries the other pile: the copy plays
+the deleted move there and the two lines are identical from that point. **The
+deferred move is not itself cut** — it lands on a card and exposes `x`, which is
+played up on the very next move. So the rewritten line wins, is no longer than
+`L`, and has one cut move fewer, which contradicts the choice of `L` unless it
+had none.
+
+**Gate 2 is the clause "both slots accept the same piles".** An empty column
+accepts every pile and no card does. Land `g` on one and the exposed `x` has no
+twin: the real line can drop a pile into that column which the copy, holding a
+card there, cannot legally match, and the mirror stops on the spot. Hence moves
+onto an empty column are never cut — which is also the move that makes working
+space, the last thing to take from a game this cramped.
+
+**Gate 1 is that the deal is addressed by column.** It lands one card on *every*
+column; the two exchanged piles are in different columns; so a deal appends a
+different card to each and the exchange is destroyed rather than carried, with
+no later move able to repair it. A dealt card also need not continue a run, so
+the pile the deferred move meant to carry can be buried outright. Gating on an
+empty stock removes the move from the argument entirely, and — this is the part
+that makes a per-position filter stand in for a theorem about instances —
+**nothing ever returns a card to the stock**, so the set of positions the rule
+fires at is closed under making a move. The proof never leaves it, and positions
+with cards still to deal keep every move they had.
+
+**The filter is a function of the position, never of the path**, so two routes
+to the same position generate the same children and the expanded-set induction
+of 2026-09-13 is untouched. That is the exact point a capped worry-back arm
+cannot make — worry-backs spent is path state, and a table that stores positions
+forgets it — and it is why this rule composes with the table while that one
+would not.
+
+**What is pinned in code**, in the shape of the safe-autoplay tests:
+`a_cut_move_exposes_a_twin_of_the_card_it_lands_on` over walked positions,
+`twins_accept_the_same_cards_and_non_twins_share_none` exhaustively over the
+deck, `an_empty_column_accepts_every_run_on_offer` for gate 2's premise,
+`nothing_ever_returns_a_card_to_the_stock` for gate 1's closure, and
+`a_stock_deal_lands_a_different_card_on_each_column` for the reason gate 1
+exists at all. A change to the build rule, to the deal, or to what an empty
+column takes now fails a test instead of quietly invalidating a paragraph.
+
+**Two things this does not claim.** It is not a re-derivation of Theorem 4, and
+it does not establish the theorem's stronger form — that a run need only be
+split when the exposed card is built on the *next* move. Only the deferred move
+is shown to satisfy that; the rule we ship is the weaker "could be built" form
+and the proof is of that form. The second open hypothesis from 2026-09-15 is
+answered in passing: a worry-back enters the argument only as a card placed on a
+column, which the copy mirrors like any other placement, so nothing here needs
+foundations to be irremovable.
