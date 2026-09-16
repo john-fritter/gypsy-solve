@@ -8,10 +8,13 @@
 //!
 //! Cuts are conservative and each one is argued where it is made. Most are
 //! transpositions — the same position, reached twice — or a limit, reported
-//! honestly. The one dominance is safe autoplay in [`Gypsy`], and it applies
-//! only when worry-back is off, because that is the only case where it is
-//! provable; see the note on `Gypsy::legal_actions`. Klondike has none, which
-//! is why it cannot check that one.
+//! honestly. The dominances are two, both in [`Gypsy`] and both proved on the
+//! note on `Gypsy::legal_actions`: a forcing rule, which is safe autoplay in
+//! the restricted arm and the two-deck safe-foundation rule in the full one,
+//! and the split-run filter. They apply together at every position, and that
+//! same note carries the argument that the pair is sound, not just each rule
+//! alone. Klondike runs its own copies of both, which is how they are checked
+//! against a game with a published answer.
 
 mod game;
 mod gypsy;

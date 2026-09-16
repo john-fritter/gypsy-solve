@@ -396,9 +396,16 @@ lucky first descent; restarts made that test meaningless and it was re-measured
 against the restart baselines. Klondike: no verdict changed at 3M or 12M, nodes
 down 32% and 20%. Gypsy under restarts: nothing contradicted or regressed, and
 the full arm gains seed 0 — solved **by itself**, 843 moves, the third deal the
-worry-back search has ever cracked without the carry. Composition with the
-split-run rule is the one thing still owed: the paper's compatibility theorem
-for that pair is single-deck too.
+worry-back search has ever cracked without the carry.
+
+**Composition closed the same day.** The paper's compatibility theorem for that
+pair is single-deck too, so the pair is argued here. It costs an induction on
+line length rather than a theorem of its own, because exactly one of the two
+rules governs any one position and neither rewrite lengthens a line. The
+argument is on `Gypsy::legal_actions`, and it is run rather than only argued:
+`cli/src/bin/compose.rs` walks a recorded winning line, applies whichever
+rewrite each position calls for, and checks what comes out. 44 lines over 20
+deals and 162k moves, all closed.
 
 **The rule to take first is a different one: the incomplete-pile dominance**
 (Appendix B.2), which *is* generalised past a single deck — an incomplete built
