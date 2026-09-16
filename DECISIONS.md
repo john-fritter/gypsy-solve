@@ -2010,3 +2010,110 @@ and the proof is of that form. The second open hypothesis from 2026-09-15 is
 answered in passing: a worry-back enters the argument only as a card placed on a
 column, which the copy mirrors like any other placement, so nothing here needs
 foundations to be irremovable.
+
+## 2026-09-16 — The two-deck safe-foundation rule: derived, measured, and held back
+
+**Status:** firm as a measurement and as a derivation. The rule is **not
+shipped**; the code was written, measured and reverted, and this entry is the
+record so it is not re-derived from scratch.
+
+This is the rule `DESIGN.md` has wanted since the full arm resolved nothing: a
+dominance that fires with worry-back *legal*. Blake & Gent prove it for one
+deck and exclude duplicate cards in terms, so the two-deck form had to be
+argued here.
+
+**The condition, in our representation** (rank 1-13, a slot holding its top
+rank, 0 for empty), for a card of rank *r*, suit *s*, colour *c* on top of a
+column and legal to a slot showing *r-1*:
+
+- **(A)** every slot of the two opposite-colour suits shows at least *r-1*;
+- **(B)** both slots of the other colour-*c* suit show at least *r-2*;
+- **(C)** both slots of suit *s* show at least *r-1*.
+
+(A) and (B) are Keller's rule with each threshold read as a minimum over that
+suit's two slots — the same correction the no-worry-back rule needed on
+2026-09-15. **(C) is new and is forced by duplicate cards**; a single deck has
+nothing to say it about. The literature brief settles the rank base: the
+paper's "opposite within two, same within three" is `opp >= r-1, twin >= r-2`
+here, not a weaker threshold.
+
+**Why the conditions are the conditions.** Together they put every card of rank
+below *r* on a foundation except colour-*c* cards of rank exactly *r-1*, and
+those build only on rank-*r* cards of the *opposite* colour — never on `X`. So
+nothing in the tableau or the stock can ever be placed on `X`, and the only way
+to cover it is to worry a card back. Whatever is worried back onto `X` can
+itself host nothing but further worried-back cards, by the same count one rank
+down, so the whole structure is foundation cards parked on each other: it hosts
+nothing, frees nothing, and can be deleted from a winning line along with the
+moves that put those cards back. With no such structure, `X` is never covered,
+and its foundation play moves to the front the way safe autoplay's does.
+
+**What (C) is for.** Without it the duplicate of `X` breaks the reordering.
+`L` may play the duplicate to the slot first and `X` to the other slot later;
+the rewritten line, having taken the first slot at move zero, must hold the
+duplicate in the tableau until the second slot comes up — and in the meantime
+the line may build on the card the duplicate was sitting on, which the rewrite
+cannot do because the duplicate is still there. (C) removes the case: either
+the second slot is already past *r*, so the duplicate is on a foundation, or it
+shows exactly *r-1*, so the duplicate goes up the moment `L` played it. An
+empty-stock gate does **not** fix this one; that was checked before (C) was
+adopted.
+
+**Klondike, 50 deals, full arm** — single deck, so (C) is vacuous and the rule
+is Keller's as published. Baselines are the recorded `klondike-full-3M` and
+`klondike-sweep-12M` split-run runs; the new files are
+`klondike-full-{3M,12M}-50deals-safefoundation.jsonl`.
+
+| Budget | Solvable | Unsolvable | Unknown | Nodes on deals decided in both |
+|---|---|---|---|---|
+| 3M | 31 | 10 | 9 | **-31.8%** |
+| 12M | 32 | 10 | 8 | **-20.3%** |
+
+No verdict contradicted, none regressed, no deal newly decided, and 29 of the
+31 winning lines came back at exactly their old length — the signature of a
+rule that forces a move the ordering already took first. The restricted arm
+reproduced its recorded run exactly.
+
+**Gypsy is why it is held back.** At 3M the restricted arm is untouched and the
+full arm loses **seed 15** — `solvable` to `unknown` — the one deal the
+worry-back search has ever cracked by itself. It is still `unknown` at 48M,
+where the baseline needed 68,592 nodes. `DESIGN.md`'s bar is that no verdict
+regresses to `unknown`, and this one does.
+
+**The regression is not the rule discarding the win, and that was established
+rather than assumed.** A scratch binary iterated the proof's own construction
+over the recorded 38,068-move line: force the safe play, delete the forced card
+from every group that carries it, delete its foundation play, delete every
+worry-back that can host nothing, and re-target the slot names the two lines
+drift apart on. After **273 rewrites it reached a 37,689-move line every move
+of which the rule-on generator offers, and which replays to a win.** So a
+compliant winning line exists for seed 15 and the search simply no longer walks
+into it: the baseline found that win on what was nearly its first descent —
+68,592 nodes for a 38,068-move line — and forcing foundation plays sends the
+descent elsewhere. Worth keeping in view that a win found that way is luck, not
+strength, and losing it is the same.
+
+Building that check cost less than arguing about the regression would have, and
+it is the method to reuse: **a dominance's proof is a construction, and a
+construction can be run against a recorded line.** It is not kept in the repo
+because with the rule reverted it has nothing to rewrite.
+
+**Not resolved, and it is the second thing owed before this ships:** two
+dominances that are each sound need not be sound together, and this one would
+compose with the split-run rule. The paper has a compatibility theorem for
+exactly this pair — safe foundation moves with the incomplete-pile rule — and
+it is a single-deck result like the rest of Appendix B.1. The measurement above
+ran both rules together, so the Klondike numbers are evidence for the pair; the
+argument is not made.
+
+**What would make it shippable.** Either a search that does not lose seed 15 —
+the honest fix is a restart or ordering change, not a weaker rule — or evidence
+across more Gypsy deals that the rule pays for what it costs. On this evidence
+it costs the only self-solved deal in the set and buys nothing measurable,
+which is not a trade to take on the game that publishes.
+
+**Answered in passing: item (a) of the two rules on the table is empty at these
+thresholds.** Strengthening the restricted arm with the worry-back disjunct
+gains nothing, because (A) is exactly the no-worry-back condition already
+shipped and the worry-back form only adds (B) and (C) on top. The restricted
+arm already forces everything this rule would.
