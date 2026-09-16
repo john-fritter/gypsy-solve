@@ -175,6 +175,46 @@ fn never_wanted_in_the_tableau(state: &State, card: Card) -> bool {
         .all(|slot| state.foundations[slot as usize] >= wanted)
 }
 
+/// True when this card can be forced to a foundation **with worry-back legal**,
+/// for two decks.
+///
+/// Keller's rule, published for one deck and excluding duplicate cards in
+/// terms, re-proved here with each threshold read as a minimum over that
+/// suit's two slots and one condition added that duplicates force:
+///
+/// - every slot of the two opposite-colour suits at least *r-1*;
+/// - both slots of the other same-colour suit at least *r-2*;
+/// - **both slots of the card's own suit at least *r-1***.
+///
+/// The proof is on [`Gypsy::legal_actions`]. Aces need no special case: the
+/// arithmetic is trivially true at rank 1.
+fn safe_with_worry_back(state: &State, card: Card) -> bool {
+    let rank = card.rank();
+    Suit::ALL.iter().all(|&suit| {
+        let reach = if suit.is_red() == card.is_red() && suit != card.suit() {
+            2
+        } else {
+            1
+        };
+        foundation_slots(suit)
+            .into_iter()
+            .all(|slot| state.foundations[slot as usize] + reach >= rank)
+    })
+}
+
+/// The first foundation play that is safe with worry-back legal, if there is
+/// one. Gypsy has no waste, so every column top is a candidate.
+fn forced_foundation_play(state: &State) -> Option<Move> {
+    state.columns.iter().enumerate().find_map(|(from, column)| {
+        let card = column.top()?;
+        let foundation = state.foundation_target(card)?;
+        safe_with_worry_back(state, card).then_some(Move::ToFoundation {
+            from: from as u8,
+            foundation,
+        })
+    })
+}
+
 /// True when this tableau move carries a strict suffix of a built run and the
 /// card it would expose has nowhere to go.
 ///
@@ -316,6 +356,58 @@ impl Game for Gypsy {
     /// promises is one the search can no longer find. This is the shape of
     /// error `CLAUDE.md` warns about and Solvitaire's authors hit twice.
     ///
+    /// # Safe foundation plays with worry-back legal, and the third condition
+    ///
+    /// With worry-back on, a card on top of a column is played and nothing
+    /// else is considered when [`safe_with_worry_back`] holds. This is the
+    /// rule the full game never had; the restricted game keeps its own, weaker
+    /// condition above, which fires strictly more often.
+    ///
+    /// **What the conditions buy.** A slot showing *v* holds one copy of every
+    /// rank up to *v*, so the three conditions together put on foundations:
+    /// every opposite-colour card of rank *r-1* or less, every same-colour card
+    /// of rank *r-2* or less, and both copies of every card of `X`'s own suit
+    /// up to *r-1*. **The only cards of rank below *r* left anywhere are
+    /// same-colour cards of rank exactly *r-1*, and those build on rank-*r*
+    /// cards of the opposite colour — never on `X`.**
+    ///
+    /// **So nothing can be put on `X` except by worrying it back**, and
+    /// whatever is worried back onto `X` can itself host nothing but further
+    /// worried-back cards, by the same count one rank down. Any structure
+    /// built on `X` is therefore foundation cards parked on each other: it
+    /// hosts nothing, frees nothing, and every card in it is owed back to a
+    /// foundation before the game is won. Delete it from a winning line along
+    /// with the moves that return those cards — nothing else can depend on it,
+    /// because the one thing a lowered foundation permits is playing a
+    /// *duplicate* of the card just removed, and both copies of every card
+    /// that could be are already up.
+    ///
+    /// With no structure on `X`, `X` is never covered, so its foundation play
+    /// moves to the front of the line the way safe autoplay's does: drop `X`
+    /// from any group that carries it — it is on top, so the group's bottom
+    /// card and the destination test are unchanged — and delete its own play.
+    ///
+    /// **The third condition is what duplicate cards cost, and it is ours.**
+    /// Playing `X` early raises its slot to *r*, and the only moves that need
+    /// that slot at *r-1* are plays of a rank-*r* card of the same suit: `X`,
+    /// and its duplicate. Without the condition the duplicate breaks the
+    /// reordering — a line may play it to this slot first and `X` to the other
+    /// slot later, and the rewritten line then has to hold the duplicate in the
+    /// tableau until that second slot comes up, while the line it is copying
+    /// builds on the card the duplicate was sitting on. Requiring both slots of
+    /// the suit to be at *r-1* removes the case: either the second slot is past
+    /// *r* and the duplicate is already up, or it shows exactly *r-1* and the
+    /// duplicate goes up the moment the line played it. **An empty-stock gate
+    /// does not fix this one**, which was checked before the condition was
+    /// adopted. Blake & Gent exclude duplicate cards from their proof in terms,
+    /// so this part is an extension of the paper rather than an application.
+    ///
+    /// **Why the stock needs no gate here.** A dealt card lands on a column
+    /// whatever it is, but it can never *build* on `X` or on anything parked on
+    /// it: those cards are all on foundations by the count above, so they are
+    /// not in the stock either. Removing `X` leaves the cards above it sitting
+    /// one deeper, which can only lengthen a run, never shorten one.
+    ///
     /// # Splitting a built run for nothing, and why the two gates hold
     ///
     /// The second dominance, and the first one the *full* game has. A move
@@ -448,10 +540,15 @@ impl Game for Gypsy {
     /// the same rule for Klondike's published worry-back variant.
     ///
     fn legal_actions(&self, position: &State, salt: u64) -> Vec<Move> {
-        if !self.options.worry_back {
-            if let Some(autoplay) = safe_autoplay(position) {
-                return vec![autoplay];
-            }
+        // A forced play is forced under every ordering, so this comes before
+        // any salt is applied.
+        let forced = if self.options.worry_back {
+            forced_foundation_play(position)
+        } else {
+            safe_autoplay(position)
+        };
+        if let Some(forced) = forced {
+            return vec![forced];
         }
 
         let mut moves = position.legal_moves(self.options);
@@ -560,6 +657,106 @@ mod tests {
         );
     }
 
+    /// A position whose column 0 top card is playable and safe with worry-back
+    /// legal: opposite colours one rank behind, the same-colour twin two, and
+    /// the card's own second slot level with the first.
+    fn with_a_forced_foundation_play(seed: u64) -> State {
+        let mut state = State::deal(seed);
+        let top = state.columns[0].top().expect("a dealt column has cards");
+        let mut foundations = [0u8; FOUNDATIONS];
+        for suit in Suit::ALL {
+            let reach = if suit.is_red() == top.is_red() && suit != top.suit() {
+                2
+            } else {
+                1
+            };
+            for slot in foundation_slots(suit) {
+                foundations[slot as usize] = top.rank() - reach;
+            }
+        }
+        state.foundations = foundations;
+        state
+    }
+
+    #[test]
+    fn a_safe_card_is_forced_in_the_full_game_too() {
+        let state = with_a_forced_foundation_play(3);
+        let actions = Gypsy::new(MoveOptions::ALL).legal_actions(&state, 0);
+        assert_eq!(actions.len(), 1, "everything else is dominated");
+        assert!(matches!(actions[0], Move::ToFoundation { from: 0, .. }));
+    }
+
+    /// The condition duplicate cards force, and the one a ported single-deck
+    /// rule has no reason to carry. With the card's own second slot a rank
+    /// short, the duplicate cannot follow it up, and the reordering that
+    /// justifies the rule breaks on exactly that.
+    #[test]
+    fn a_card_is_unsafe_until_its_own_second_slot_catches_up() {
+        let mut state = with_a_forced_foundation_play(3);
+        let top = state.columns[0].top().expect("a dealt column has cards");
+        let slots = foundation_slots(top.suit());
+        let second = slots[1] as usize;
+
+        state.foundations[second] = top.rank() - 2;
+        assert!(
+            !safe_with_worry_back(&state, top),
+            "the duplicate cannot follow this card up, so it is not forced"
+        );
+
+        state.foundations[second] = top.rank() - 1;
+        assert!(safe_with_worry_back(&state, top));
+    }
+
+    /// And the same-colour twin, two ranks rather than one: it is the
+    /// condition that stops a worried-back card finding something to host.
+    #[test]
+    fn a_card_is_unsafe_until_the_same_colour_twin_is_within_two() {
+        let mut state = with_a_forced_foundation_play(3);
+        let top = state.columns[0].top().expect("a dealt column has cards");
+        let twin = Suit::ALL
+            .into_iter()
+            .find(|suit| suit.is_red() == top.is_red() && *suit != top.suit())
+            .expect("every suit has a same-colour twin");
+
+        state.foundations[foundation_slots(twin)[1] as usize] = top.rank() - 3;
+        assert!(!safe_with_worry_back(&state, top));
+
+        state.foundations[foundation_slots(twin)[1] as usize] = top.rank() - 2;
+        assert!(safe_with_worry_back(&state, top));
+    }
+
+    /// Nothing builds on an ace, so it is forced whatever else is showing.
+    #[test]
+    fn an_ace_is_safe_with_worry_back_whatever_the_foundations_show() {
+        let state = State::deal(3);
+        for suit in Suit::ALL {
+            assert!(safe_with_worry_back(&state, Card::new(suit, 1)));
+        }
+    }
+
+    /// The worry-back rule is strictly the stronger of the two, which is why
+    /// the restricted arm keeps its own and gains nothing from this one.
+    #[test]
+    fn the_worry_back_condition_implies_the_restricted_one() {
+        let game = Gypsy::new(MoveOptions::ALL);
+        let mut fired = 0;
+        for seed in 0..4 {
+            for state in descend(&game, seed, 800) {
+                for column in &state.columns {
+                    let Some(card) = column.top() else { continue };
+                    if safe_with_worry_back(&state, card) {
+                        fired += 1;
+                        assert!(
+                            never_wanted_in_the_tableau(&state, card),
+                            "{card} is forced with worry-back on but not with it off"
+                        );
+                    }
+                }
+            }
+        }
+        assert!(fired > 0, "the test never met the case it is pinning");
+    }
+
     /// Walks the search's first descent, collecting positions.
     fn descend(game: &Gypsy, seed: u64, steps: usize) -> Vec<State> {
         let mut state = State::deal(seed);
@@ -619,7 +816,9 @@ mod tests {
 
         for seed in 0..6 {
             for state in descend(&game, seed, 1_500) {
-                if state.stock.is_empty() {
+                // A position with a forced foundation play offers that and
+                // nothing else, which is a different rule's business.
+                if state.stock.is_empty() || forced_foundation_play(&state).is_some() {
                     continue;
                 }
                 let offered = game.legal_actions(&state, 0);

@@ -73,6 +73,34 @@ fn safe_autoplay(position: &Position) -> Option<Action> {
     })
 }
 
+/// True when this card can be forced up **with worry-back legal**.
+///
+/// Keller's rule at the thresholds this project proves: every opposite-colour
+/// foundation within one rank of *r*, the other suit of the same colour within
+/// two. One deck, so the duplicate condition the Gypsy rule carries has
+/// nothing to say here. Aces need no special case.
+fn safe_with_worry_back(position: &Position, card: Card) -> bool {
+    let rank = card.rank();
+    Suit::ALL.iter().all(|&suit| {
+        if suit == card.suit() {
+            return true;
+        }
+        let reach = if suit.is_red() != card.is_red() { 1 } else { 2 };
+        position.foundations[suit.index() as usize] + reach >= rank
+    })
+}
+
+/// The first foundation play from a *pile top* that is safe with worry-back
+/// legal. The waste is excluded for the reason [`safe_autoplay`] excludes it:
+/// playing a card off it re-aligns every later draw.
+fn forced_foundation_play(position: &Position) -> Option<Action> {
+    position.piles.iter().enumerate().find_map(|(from, pile)| {
+        let card = pile.top()?;
+        (position.foundation_accepts(card) && safe_with_worry_back(position, card))
+            .then_some(Action::PileToFoundation { from: from as u8 })
+    })
+}
+
 /// True when this move carries a strict suffix of a built run and the card it
 /// would expose has nowhere to go.
 ///
@@ -225,10 +253,15 @@ impl Game for Klondike {
     /// that proves deals unsolvable, which is the direction a wrong dominance
     /// fails in.
     fn legal_actions(&self, position: &Position, salt: u64) -> Vec<Action> {
-        if !self.options.worry_back {
-            if let Some(autoplay) = safe_autoplay(position) {
-                return vec![autoplay];
-            }
+        // A forced play is forced under every ordering, so this comes before
+        // any salt is applied.
+        let forced = if self.options.worry_back {
+            forced_foundation_play(position)
+        } else {
+            safe_autoplay(position)
+        };
+        if let Some(forced) = forced {
+            return vec![forced];
         }
 
         let mut actions = position.legal_actions(self.options);
@@ -346,6 +379,48 @@ mod tests {
             actions.contains(&Action::WasteToFoundation) && actions.len() > 1,
             "the safe waste card is an option, not a forced move, got {actions:?}"
         );
+    }
+
+    /// The worry-back rule needs the same-colour twin within two ranks as well,
+    /// and that is the whole difference from the restricted one. A six of
+    /// spades with both red fives up is safe with worry-back off; it takes a
+    /// four of clubs as well before it can be forced with worry-back on.
+    #[test]
+    fn the_worry_back_rule_wants_the_same_colour_twin_too() {
+        let mut position = Position::deal(3);
+        let black_six = card(Suit::Spades, 6);
+
+        position.foundations = [5, 5, 0, 5];
+        assert!(never_wanted_in_the_tableau(&position, black_six));
+        assert!(!safe_with_worry_back(&position, black_six));
+
+        position.foundations[2] = 4;
+        assert!(safe_with_worry_back(&position, black_six));
+    }
+
+    /// And with it, the full game forces the play rather than considering
+    /// alternatives — which the restricted arm has done since safe autoplay
+    /// and the published arm never could.
+    #[test]
+    fn a_safe_card_is_forced_in_the_full_game_too() {
+        let six = [card(Suit::Spades, 6)];
+        let king = [card(Suit::Spades, 13)];
+        let mut piles: [(usize, &[Card]); PILES] = [(0, &[]); PILES];
+        piles[0] = (0, &six);
+        piles[1] = (0, &king);
+        let position = Position::from_parts(piles, [5, 5, 4, 5], &[], 0);
+
+        let actions = Klondike::new(MoveOptions::ALL).legal_actions(&position, 0);
+        assert_eq!(actions, vec![Action::PileToFoundation { from: 0 }]);
+    }
+
+    /// Nothing builds on an ace, so it is forced whatever is showing.
+    #[test]
+    fn an_ace_is_safe_with_worry_back_whatever_the_foundations_show() {
+        let position = Position::deal(3);
+        for suit in Suit::ALL {
+            assert!(safe_with_worry_back(&position, card(suit, 1)));
+        }
     }
 
     /// Every foundation index the rule reads is a suit index, which is what
