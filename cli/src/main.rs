@@ -9,7 +9,7 @@ mod batch;
 
 use clap::{Args, Parser, Subcommand};
 use gypsy_core::{parse_move_list, Move, MoveOptions, State};
-use gypsy_solver::{solve, Config, Gypsy, Limit, Report, Verdict};
+use gypsy_solver::{solve_restarting, Config, Gypsy, Limit, Report, Verdict};
 use klondike::{Klondike, Position};
 
 #[derive(Parser)]
@@ -90,6 +90,10 @@ struct SolveArgs {
     /// Solve the restricted game, with no foundation-to-tableau moves.
     #[arg(long)]
     no_worry_back: bool,
+    /// Searches to run, splitting the budget and reordering the moves each
+    /// time. A restart can only turn `unknown` into a decision.
+    #[arg(long, default_value_t = 1)]
+    restarts: u32,
     /// Write the winning line here, for `gypsy replay --moves-file`.
     #[arg(long, value_name = "PATH")]
     trace: Option<String>,
@@ -113,6 +117,10 @@ struct KlondikeArgs {
     max_depth: u32,
     #[arg(long, default_value_t = 256)]
     table_mib: usize,
+    /// Searches to run, splitting the budget and reordering the moves each
+    /// time. A restart can only turn `unknown` into a decision.
+    #[arg(long, default_value_t = 1)]
+    restarts: u32,
     /// Solve the restricted game, with no foundation-to-tableau moves.
     ///
     /// The published 81.945% is the worry-back figure, so this arm validates
@@ -186,6 +194,7 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
                 node_budget: args.budget,
                 max_depth: args.max_depth,
                 table_entries: gypsy_solver::Table::entries_in(args.table_mib << 20),
+                ordering_salt: 0,
             };
             let game = Klondike::new(if args.no_worry_back {
                 klondike::MoveOptions::NO_WORRY_BACK
@@ -194,14 +203,15 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
             });
 
             for seed in args.seed..args.seed + args.deals {
-                let report = solve(&game, &Position::deal(seed), config)?;
+                let report = solve_restarting(&game, &Position::deal(seed), config, args.restarts)?;
                 if args.json {
                     writeln!(
                         out,
                         concat!(
                             r#"{{"game":"klondike","seed":{},"ruleset":"{}","#,
                             r#""verdict":"{}","limit":"{}","#,
-                            r#""nodes":{},"line_length":{},"elapsed_ms":{},"line":{}}}"#
+                            r#""nodes":{},"line_length":{},"elapsed_ms":{},"#,
+                            r#""restarts_used":{},"line":{}}}"#
                         ),
                         seed,
                         ruleset_name(args.no_worry_back),
@@ -210,6 +220,7 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
                         report.nodes,
                         report.line.as_ref().map_or(0, |line| line.len()),
                         report.elapsed.as_millis(),
+                        report.restarts_used,
                         line_json(report.line.as_deref()),
                     )?;
                 } else {
@@ -232,6 +243,7 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
                 node_budget: args.budget,
                 max_depth: args.max_depth,
                 table_entries: gypsy_solver::Table::entries_in(args.table_mib << 20),
+                ordering_salt: 0,
             };
             let game = Gypsy::new(if args.no_worry_back {
                 MoveOptions::NO_WORRY_BACK
@@ -240,7 +252,7 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
             });
 
             let state = State::deal(args.seed);
-            let report = solve(&game, &state, config)?;
+            let report = solve_restarting(&game, &state, config, args.restarts)?;
 
             if let (Some(path), Some(line)) = (&args.trace, &report.line) {
                 let text: Vec<String> = line.iter().map(|mv| mv.to_string()).collect();
@@ -342,7 +354,7 @@ fn json_report(seed: u64, args: &SolveArgs, report: &Report<Move>) -> String {
         concat!(
             r#"{{"game":"gypsy","seed":{},"ruleset":"{}","verdict":"{}","limit":"{}","nodes":{},"#,
             r#""line_length":{},"elapsed_ms":{},"node_budget":{},"max_depth":{},"#,
-            r#""table_capacity":{},"table_filled":{},"line":{}}}"#
+            r#""table_capacity":{},"table_filled":{},"restarts_used":{},"line":{}}}"#
         ),
         seed,
         ruleset_name(args.no_worry_back),
@@ -355,6 +367,7 @@ fn json_report(seed: u64, args: &SolveArgs, report: &Report<Move>) -> String {
         args.max_depth,
         report.table_capacity,
         report.table_filled,
+        report.restarts_used,
         line,
     )
 }

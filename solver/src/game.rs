@@ -24,7 +24,13 @@ pub trait Game {
     /// Ordering is the implementation's business and is free: reordering
     /// discards nothing. Leaving an action *out* is a dominance, and needs an
     /// argument for why it cannot discard a winning line.
-    fn legal_actions(&self, position: &Self::Position) -> Vec<Self::Action>;
+    ///
+    /// `salt` lets the search ask for a *different* order — it is how
+    /// restarts are built. Zero is the game's own order, and every other value
+    /// must permute the same set: a salt that changed which actions exist
+    /// would be a dominance nobody argued for, and it would make a verdict
+    /// depend on which restart happened to reach a position.
+    fn legal_actions(&self, position: &Self::Position, salt: u64) -> Vec<Self::Action>;
 
     /// Applies an action. Errors describe why it was illegal; the search only
     /// ever passes actions that came from `legal_actions`, but verification

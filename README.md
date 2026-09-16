@@ -66,9 +66,9 @@ winning line contains is a measurement in its own right — see
 `analysis/worry_back_usage.py`, which counts how much worry-back wins actually
 use.
 
-The solver applies two dominances, each with a proof that it cannot discard a
-winning line. Both are implemented once per game rather than shared, because
-the proofs differ.
+The solver applies three dominances, each with a proof that it cannot discard a
+winning line. All are implemented once per game rather than shared, because the
+proofs differ.
 
 **Safe autoplay, restricted game only.** With `--no-worry-back`, a card that can
 never be wanted in the tableau again is played up and nothing else is considered
@@ -78,6 +78,15 @@ opposite-colour foundation piles because two decks give each suit two; Klondike
 checks two, and additionally excludes the waste, because playing a card off it
 re-aligns every later draw-three.
 
+**Safe foundation plays with worry-back legal**, in both games. A card whose
+opposite-colour foundations are within a rank, whose same-colour twin suit is
+within two, and — for Gypsy, where duplicate cards force it — whose own suit's
+second slot is level with the first, is played up and nothing else is
+considered. This is Keller's rule; the paper proves it for one deck and excludes
+duplicate cards in terms, so the two-deck form is proved on
+`Gypsy::legal_actions` rather than inherited. It is the first rule the *full*
+game has that forces a move.
+
 **Never split a built run to expose a dead card**, in both games. A move
 carrying part of a built run is not offered when the card it would uncover has
 no foundation to go to: splitting a run frees the card beneath it, and splitting
@@ -85,8 +94,8 @@ it to free a dead card is a shuffle. This is Blake & Gent's Theorem 4, which
 unlike their safe-foundation rule is proved for games with duplicate cards, and
 which reaches Gypsy because any alternating-colour sequence moves as a unit —
 the theorem needs one policy for single cards and for groups. Gypsy gates it on
-an exhausted stock and a non-empty destination, for reasons given on
-`Gypsy::legal_actions`; Klondike needs neither gate.
+an exhausted stock and a non-empty destination, both proved on
+`Gypsy::legal_actions` rather than inherited; Klondike needs neither gate.
 
 The second rule is the only one the **full** game has, and it is what took the
 Gypsy worry-back arm from resolving nothing to resolving most of a 50-deal
@@ -94,6 +103,30 @@ sample. Hard deals still return `unknown`.
 
 `cargo run --release --bin branching` reports how much of move generation each
 kind of move accounts for, which is how that rule was sized before it was built.
+
+## Restarts
+
+`--restarts k` splits the budget into *k* searches, each under a different move
+ordering, and stops at the first one that decides the deal. It is on `solve`,
+`klondike` and `batch`, and defaults to 1, which is the search as it was before
+restarts existed.
+
+Nothing about the three-valued verdict changes. Each restart is a whole search:
+a win is replayed from the deal before it is believed, and `unsolvable` is still
+claimed only by a search that exhausted the reachable game without touching a
+limit — a proof whatever ordering produced it. **A restart can turn `unknown`
+into a decision and can never turn a decision into anything else.** The first
+slice always runs the game's own ordering, so a restart run begins with the
+deterministic one.
+
+The ordering is shuffled *within* the bands the game already sorts into, seeded
+from the position, so two routes to the same position still generate the same
+children in the same order and a verdict is still reproducible from its seed.
+
+**It is worth a great deal on Gypsy and nothing on Klondike**, and the reason is
+line length. Gypsy wins run 1,301 to 99,982 moves and are walked into or missed;
+Klondike wins run 136 to 467 and its unknown deals are simply large. See
+`DECISIONS.md`.
 
 ## Batch runs
 

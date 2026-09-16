@@ -15,6 +15,7 @@ fn config(budget: u64, depth: u32) -> Config {
         node_budget: budget,
         max_depth: depth,
         table_entries: 1 << 18,
+        ordering_salt: 0,
     }
 }
 

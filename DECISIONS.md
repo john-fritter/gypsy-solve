@@ -1800,3 +1800,470 @@ survives, not a re-run of its case analysis. The honest status is that the
 measured evidence is strong — two arms, no contradictions, three new unsolvable
 proofs — and the argument is a sketch. If a later run contradicts a verdict,
 this entry is where to look first.
+
+## 2026-09-16 — Re-swept on the current search: the curve moved down, not round, and the wall is now memory
+
+**Status:** firm as a measurement. Supersedes the extrapolation in *Re-measured:
+the search does converge with budget, far too slowly* (2026-09-14), whose 0.804
+slope was taken before either dominance existed. `DESIGN.md` asked for this
+re-sweep before anyone planned around that slope.
+
+**Method.** The same 50 Klondike deals, full arm, at 3M, 12M and 48M nodes, with
+the table held at 5.6 slots per node of budget — 256 MiB, 1 GiB, 4 GiB — so that
+what varies between levels is the budget and not table pressure. That protocol
+is checked rather than assumed this time: peak fill was **17.9% of capacity at
+both upper levels**, so no level was evicting. Raw results in
+`docs/results/klondike-sweep-{12M,48M}-50deals-splitrun.jsonl`; the 3M level is
+the recorded `klondike-full-3M-50deals-splitrun.jsonl`, which the re-run
+reproduced exactly — verdict, node count and line length on all 50, on different
+hardware again.
+
+| Budget | Table | Solvable | Unsolvable | Unknown | Bracket |
+|---|---|---|---|---|---|
+| 3M | 256 MiB | 31 | 10 | 9 (18%) | 40.6 pts |
+| 12M | 1 GiB | 32 | 10 | 8 (16%) | 38.6 pts |
+| 48M | 4 GiB | 34 | 10 | 6 (12%) | 34.6 pts |
+
+**The slope is unchanged. 0.817 per fourfold step against the old 0.804** —
+0.889 then 0.750, and at n=50 those two steps are two and three deals, so the
+difference from the old figure is noise. The dominance did not change the rate
+at which budget buys verdicts; it lowered the curve. This is the second time a
+large improvement has moved the curve down and left the slope alone, the table
+rewrite of 2026-09-13 being the first, and it is now the expected shape rather
+than a surprise.
+
+**What that is worth, and it is a great deal.** Reaching 5% unknown from 12%
+needs 4.3 further fourfold steps, about **400x the 48M budget, 1.9x10^10 nodes
+per deal**. The old sweep put the same gate at 4x10^4 times *its* 48M budget,
+2x10^12 nodes per deal. Two orders of magnitude closer for one dominance. The 1%
+publishing gate needs 2.4x10^7 times the 48M budget and is not worth costing.
+
+**But the wall has changed kind, and this is the finding.** At the 176k nodes
+per second measured here, 1.9x10^10 nodes is 33 CPU-hours for one hard deal and
+about 4.4 CPU-days for a 50-deal set — extrapolating total nodes, which grow as
+budget^0.862 across this sweep, not as the budget. Roughly 88 CPU-days for a
+thousand deals, three weeks of wall clock at four workers. That is large but it
+is no longer absurd; time is not what rules it out.
+
+**Memory is.** At the protocol this sweep uses, a 1.9x10^10-node budget wants
+1.1x10^11 slots, **1.7 TB of table per worker**. Run it at 4 GiB instead and the
+level is not on this curve at all: the table holds 2.7x10^8 slots, the search
+would be evicting by a factor of seventy, and the sweep would be measuring table
+pressure — which is exactly what the protocol exists to exclude, and which
+2026-09-15 recorded as costing re-expansions in both directions. **So the
+extrapolation breaks its own conditions long before it reaches the gate.** The
+honest statement is not "400x the budget reaches 5%"; it is that on affordable
+memory nothing on this curve is measurable much past 10^9 nodes per deal, and
+the gate sits an order of magnitude beyond that.
+
+**And this sweep was already unaffordable on the box it is meant for.** The 48M
+level needs a 4 GiB table per worker; fritter.lol has about 4.9 GiB available in
+total. It ran here, on a 15 GiB container, at two workers. A budget-led route to
+the gate would need the machine before it needed the patience.
+
+**No verdict contradicted and none regressed**, in either direction, across all
+three levels. Every unknown at every level was stopped by the node budget; the
+stack guard was never reached. Proven-unsolvable held at 10 of 50 throughout —
+still 20%, still above Klondike's true 18.06% ceiling, still inside the Wilson
+interval at n=50 and still unable to discriminate until n=1000. That warning
+from 2026-09-14 stands unchanged.
+
+**Gypsy, the same three levels, both arms**, table and worker counts as above.
+Raw results in `docs/results/gypsy-both-{3M,12M,48M}-50deals-splitrun.jsonl`,
+with the recorded 5M run shown for continuity.
+
+| Budget | restricted | full | full arm's own wins |
+|---|---|---|---|
+| 3M | 25 solvable, 25 unknown | 26, 24 | 1 |
+| 5M | 28, 22 | 29, 21 | 1 |
+| 12M | 31, 19 | 31, 19 | **0** |
+| 48M | 38, 12 | 38, 12 | **0** |
+
+**The restricted arm converges faster than Klondike does** — 25, 19, 12 unknown
+is a factor of **0.693** per fourfold step against Klondike's 0.817 — and it
+reaches the same wall from a worse starting height, 5% needing about 390x the
+48M budget. Nothing about that is encouraging, because the restricted arm is not
+the figure this project exists to produce.
+
+**The full arm resolves nothing it is asked to search, at any budget.** The zeros
+are not a regression and the ones above them are not progress: under
+`--both-arms` the restricted arm goes first and its wins are carried, so the full
+arm only ever searches the deals the restricted arm failed. Seed 15 — the one
+deal the full arm has ever cracked by itself — is solved by the restricted arm
+from 12M up, so the full arm never saw it again. On the deals it did search it
+spent every node of its budget and decided none of them: 228M across 19 deals at
+12M, 576M across 12 deals at 48M. **Across a sixteenfold range of budget, the
+worry-back arm has bought exactly zero verdicts of its own.** That is the
+headline arm, and it is not on the curve this sweep measures — it has no curve.
+
+**Zero Gypsy deals are proven unsolvable at any budget, in either arm**, 48M
+included, and every unknown at every level was stopped by the budget rather than
+the stack guard. That is
+the same hole 2026-09-15 recorded: the Gypsy set cannot catch a dominance that
+discards a winning line, because it proves nothing in the direction that error
+shows up in. Klondike remains the only set with teeth.
+
+**What this settles.** Budget is not a route to the gate, and it is not a route
+to the headline figure either. The 0.804 slope should not be quoted again; the
+0.817 that replaces it says the same thing, from a curve that is two orders of
+magnitude lower and against a ceiling that is now memory rather than time.
+Dominances remain the critical path, exactly as 2026-09-12 set it and for the
+third time with a different reason.
+
+## 2026-09-16 — The two gates are proved, by arguing Gypsy rather than the theorem
+
+**Status:** firm. Closes the "What is still owed" paragraph of *A run is not
+split to expose a dead card* (earlier today), which recorded the gates as
+argued rather than proved.
+
+Nothing about the shipped rule changes. Both games reproduce their recorded 3M
+runs exactly — verdict, nodes and line length on all 50 Klondike deals and all
+100 Gypsy records. What changes is that the cut now has a proof of the kind
+`CLAUDE.md` demands before a dominance goes in, and the search's only full-game
+rule no longer rests on a sketch.
+
+**Why it is proved directly rather than by re-running Theorem 4's case
+analysis.** The theorem is a statement about a whole instance; this is a filter
+on move generation, applied at some positions and not others, under a
+transposition table. Bridging that gap needs an argument about *our* game
+either way, and the papers are not reachable from this session in any case. A
+Gypsy-specific proof is also what the one-implementation constraint wants: the
+rule is ours, so the proof should be.
+
+**The proof, and it is short because one fact carries it.** Write the cut move
+as carrying a group `g` off column `i` onto the top card `d` of column `j`, and
+let `x` be the card left directly under `g`. Both `x` and `d` hold `g`'s bottom
+card, so both are one rank above it and of the opposite colour. **`x` and `d`
+are the same rank and the same colour, so they accept exactly the same piles**
+— building tests rank and colour and nothing else. They are usually different
+suits, so they are *not* interchangeable for a foundation play, and that single
+asymmetry is the whole of the rest.
+
+Take a winning line `L` from the position with as few cut moves as possible and
+suppose it opens with this one. Delete it and follow the rest. Every position
+the copy reaches is the real one with the contents of two slots exchanged — a
+slot being a card and the pile built on it — starting with `g` on `x` in the
+copy and on `d` in the real line. The copy plays the same cards onto the same
+card, the two slots standing in for each other, and the exchange survives every
+move:
+
+- cards taken from inside a pile, the slot card lifted with its pile, or
+  anything not in either pile — the same move, exposing the same card;
+- a whole pile lifted off its slot — the copy lifts *its* slot's pile instead,
+  onto the same destination, legal because both piles fit both slots, and
+  exposing the same slot card; the exchange carries over to the destination;
+- a card placed on a bare slot — bare in one line means the twin is bare in the
+  other, and the twin accepts it.
+
+**Every mirrored move exposes the card its original exposed, from the same kind
+of destination, so it is cut exactly when its original was.** That is what
+makes the rewrite terminate rather than trade one cut move for another.
+
+The one thing the copy cannot mirror is a foundation play of a slot card, which
+needs the suit. `L` plays `x` up only with `x` bare, so the pile on `d` is
+empty, so in the copy `d` is bare and `x` carries the other pile: the copy plays
+the deleted move there and the two lines are identical from that point. **The
+deferred move is not itself cut** — it lands on a card and exposes `x`, which is
+played up on the very next move. So the rewritten line wins, is no longer than
+`L`, and has one cut move fewer, which contradicts the choice of `L` unless it
+had none.
+
+**Gate 2 is the clause "both slots accept the same piles".** An empty column
+accepts every pile and no card does. Land `g` on one and the exposed `x` has no
+twin: the real line can drop a pile into that column which the copy, holding a
+card there, cannot legally match, and the mirror stops on the spot. Hence moves
+onto an empty column are never cut — which is also the move that makes working
+space, the last thing to take from a game this cramped.
+
+**Gate 1 is that the deal is addressed by column.** It lands one card on *every*
+column; the two exchanged piles are in different columns; so a deal appends a
+different card to each and the exchange is destroyed rather than carried, with
+no later move able to repair it. A dealt card also need not continue a run, so
+the pile the deferred move meant to carry can be buried outright. Gating on an
+empty stock removes the move from the argument entirely, and — this is the part
+that makes a per-position filter stand in for a theorem about instances —
+**nothing ever returns a card to the stock**, so the set of positions the rule
+fires at is closed under making a move. The proof never leaves it, and positions
+with cards still to deal keep every move they had.
+
+**The filter is a function of the position, never of the path**, so two routes
+to the same position generate the same children and the expanded-set induction
+of 2026-09-13 is untouched. That is the exact point a capped worry-back arm
+cannot make — worry-backs spent is path state, and a table that stores positions
+forgets it — and it is why this rule composes with the table while that one
+would not.
+
+**What is pinned in code**, in the shape of the safe-autoplay tests:
+`a_cut_move_exposes_a_twin_of_the_card_it_lands_on` over walked positions,
+`twins_accept_the_same_cards_and_non_twins_share_none` exhaustively over the
+deck, `an_empty_column_accepts_every_run_on_offer` for gate 2's premise,
+`nothing_ever_returns_a_card_to_the_stock` for gate 1's closure, and
+`a_stock_deal_lands_a_different_card_on_each_column` for the reason gate 1
+exists at all. A change to the build rule, to the deal, or to what an empty
+column takes now fails a test instead of quietly invalidating a paragraph.
+
+**Two things this does not claim.** It is not a re-derivation of Theorem 4, and
+it does not establish the theorem's stronger form — that a run need only be
+split when the exposed card is built on the *next* move. Only the deferred move
+is shown to satisfy that; the rule we ship is the weaker "could be built" form
+and the proof is of that form. The second open hypothesis from 2026-09-15 is
+answered in passing: a worry-back enters the argument only as a card placed on a
+column, which the copy mirrors like any other placement, so nothing here needs
+foundations to be irremovable.
+
+## 2026-09-16 — The two-deck safe-foundation rule: derived, measured, and held back
+
+**Status:** firm as a measurement and as a derivation. The rule is **not
+shipped**; the code was written, measured and reverted, and this entry is the
+record so it is not re-derived from scratch.
+
+This is the rule `DESIGN.md` has wanted since the full arm resolved nothing: a
+dominance that fires with worry-back *legal*. Blake & Gent prove it for one
+deck and exclude duplicate cards in terms, so the two-deck form had to be
+argued here.
+
+**The condition, in our representation** (rank 1-13, a slot holding its top
+rank, 0 for empty), for a card of rank *r*, suit *s*, colour *c* on top of a
+column and legal to a slot showing *r-1*:
+
+- **(A)** every slot of the two opposite-colour suits shows at least *r-1*;
+- **(B)** both slots of the other colour-*c* suit show at least *r-2*;
+- **(C)** both slots of suit *s* show at least *r-1*.
+
+(A) and (B) are Keller's rule with each threshold read as a minimum over that
+suit's two slots — the same correction the no-worry-back rule needed on
+2026-09-15. **(C) is new and is forced by duplicate cards**; a single deck has
+nothing to say it about. The literature brief settles the rank base: the
+paper's "opposite within two, same within three" is `opp >= r-1, twin >= r-2`
+here, not a weaker threshold.
+
+**Why the conditions are the conditions.** Together they put every card of rank
+below *r* on a foundation except colour-*c* cards of rank exactly *r-1*, and
+those build only on rank-*r* cards of the *opposite* colour — never on `X`. So
+nothing in the tableau or the stock can ever be placed on `X`, and the only way
+to cover it is to worry a card back. Whatever is worried back onto `X` can
+itself host nothing but further worried-back cards, by the same count one rank
+down, so the whole structure is foundation cards parked on each other: it hosts
+nothing, frees nothing, and can be deleted from a winning line along with the
+moves that put those cards back. With no such structure, `X` is never covered,
+and its foundation play moves to the front the way safe autoplay's does.
+
+**What (C) is for.** Without it the duplicate of `X` breaks the reordering.
+`L` may play the duplicate to the slot first and `X` to the other slot later;
+the rewritten line, having taken the first slot at move zero, must hold the
+duplicate in the tableau until the second slot comes up — and in the meantime
+the line may build on the card the duplicate was sitting on, which the rewrite
+cannot do because the duplicate is still there. (C) removes the case: either
+the second slot is already past *r*, so the duplicate is on a foundation, or it
+shows exactly *r-1*, so the duplicate goes up the moment `L` played it. An
+empty-stock gate does **not** fix this one; that was checked before (C) was
+adopted.
+
+**Klondike, 50 deals, full arm** — single deck, so (C) is vacuous and the rule
+is Keller's as published. Baselines are the recorded `klondike-full-3M` and
+`klondike-sweep-12M` split-run runs; the new files are
+`klondike-full-{3M,12M}-50deals-safefoundation.jsonl`.
+
+| Budget | Solvable | Unsolvable | Unknown | Nodes on deals decided in both |
+|---|---|---|---|---|
+| 3M | 31 | 10 | 9 | **-31.8%** |
+| 12M | 32 | 10 | 8 | **-20.3%** |
+
+No verdict contradicted, none regressed, no deal newly decided, and 29 of the
+31 winning lines came back at exactly their old length — the signature of a
+rule that forces a move the ordering already took first. The restricted arm
+reproduced its recorded run exactly.
+
+**Gypsy is why it is held back.** At 3M the restricted arm is untouched and the
+full arm loses **seed 15** — `solvable` to `unknown` — the one deal the
+worry-back search has ever cracked by itself. It is still `unknown` at 48M,
+where the baseline needed 68,592 nodes. `DESIGN.md`'s bar is that no verdict
+regresses to `unknown`, and this one does.
+
+**The regression is not the rule discarding the win, and that was established
+rather than assumed.** A scratch binary iterated the proof's own construction
+over the recorded 38,068-move line: force the safe play, delete the forced card
+from every group that carries it, delete its foundation play, delete every
+worry-back that can host nothing, and re-target the slot names the two lines
+drift apart on. After **273 rewrites it reached a 37,689-move line every move
+of which the rule-on generator offers, and which replays to a win.** So a
+compliant winning line exists for seed 15 and the search simply no longer walks
+into it: the baseline found that win on what was nearly its first descent —
+68,592 nodes for a 38,068-move line — and forcing foundation plays sends the
+descent elsewhere. Worth keeping in view that a win found that way is luck, not
+strength, and losing it is the same.
+
+Building that check cost less than arguing about the regression would have, and
+it is the method to reuse: **a dominance's proof is a construction, and a
+construction can be run against a recorded line.** It is not kept in the repo
+because with the rule reverted it has nothing to rewrite.
+
+**Not resolved, and it is the second thing owed before this ships:** two
+dominances that are each sound need not be sound together, and this one would
+compose with the split-run rule. The paper has a compatibility theorem for
+exactly this pair — safe foundation moves with the incomplete-pile rule — and
+it is a single-deck result like the rest of Appendix B.1. The measurement above
+ran both rules together, so the Klondike numbers are evidence for the pair; the
+argument is not made.
+
+**What would make it shippable.** Either a search that does not lose seed 15 —
+the honest fix is a restart or ordering change, not a weaker rule — or evidence
+across more Gypsy deals that the rule pays for what it costs. On this evidence
+it costs the only self-solved deal in the set and buys nothing measurable,
+which is not a trade to take on the game that publishes.
+
+**Answered in passing: item (a) of the two rules on the table is empty at these
+thresholds.** Strengthening the restricted arm with the worry-back disjunct
+gains nothing, because (A) is exactly the no-worry-back condition already
+shipped and the worry-back form only adds (B) and (C) on top. The restricted
+arm already forces everything this rule would.
+
+## 2026-09-16 — Randomised restarts: worth four times the budget on Gypsy, worth nothing on Klondike
+
+**Status:** firm. `--restarts k` ships, defaulting to 1. The default is 1 and not
+more because the right number is not the same for both games, and this entry is
+the measurement that says so.
+
+**Why it was tried.** Two things this session pointed the same way. The budget
+re-sweep put the slope at 0.817 per fourfold step and showed it surviving every
+improvement to the search, so compute is not the route. And seed 15 — the one
+deal the Gypsy full arm had ever solved by itself — turned out to have been
+found by a **68,592-node first descent on a 38,068-move line**, which is not
+search strength, it is walking into a win. `DESIGN.md` had already named
+restarts as the lever off that curve and nobody had tested it.
+
+**What it is.** The budget is cut into *k* searches under different move
+orderings, stopping at the first that decides the deal. The salt goes through
+the `Game` trait, because ordering is the game's business and the batch shares
+one game across workers; each game shuffles *within* the bands it already sorts
+into, seeded from the position key, so the order is a function of where the
+search is rather than how it got there. Salt zero runs first, so `--restarts 1`
+is exactly the old search and reproduces the recorded 3M Klondike run to the
+node.
+
+**It costs nothing in rigour.** Each restart is a whole search. A win is
+replayed from the deal before it is believed. `Unsolvable` is claimed only by a
+slice that exhausted the reachable game without touching a limit, which is a
+proof whatever ordering produced it. **A restart can turn `unknown` into a
+decision and can never turn a decision into anything else.**
+
+**Gypsy, 50 deals, both arms, table 256 MiB.** Unknowns out of 50 per arm.
+
+| Policy | restricted | full | decided by a restart | nodes |
+|---|---|---|---|---|
+| 3M, one run | 25 | 24 | — | 155M |
+| 6M, one run | 20 | 20 | — | 272M |
+| 6M as 2 x 3M | 15 | 15 | 10 | 223M |
+| 12M, one run | 19 | 19 | — | 499M |
+| 12M as 4 x 3M | 11 | 10 | 15 | 338M |
+| **12M as 8 x 1.5M** | **6** | **6** | 19 | 229M |
+| 12M as 24 x 500k | 6 | 6 | 26 | 195M |
+| 24M as 8 x 3M | 6 | 6 | 19 | 436M |
+| **48M as 32 x 1.5M** | **4** | **4** | 21 | 531M |
+| 48M, one run | 12 | 12 | — | 1,375M |
+
+**Twelve unknown becomes four at the same budget, for a third of the nodes.**
+Restarts at 12M beat a single run at 48M on both arms — the lever is worth about
+four times the budget, and it is worth it in wall clock too, because a deal that
+a slice wins stops there. Nothing was contradicted or regressed anywhere in the
+table except where noted below.
+
+**Slice size matters and 1.5M is about right at these budgets.** Eight slices
+beat four at 12M; twenty-four slices of 500k resolve the same six but lose seed
+34, a win that needs a longer dig than a 500k slice allows, and gain another in
+its place. Below about a million the slices stop being long enough to reach a
+Gypsy win at all.
+
+**Klondike gains nothing, and at finer slices it loses.** 12M as 8 x 1.5M:
+31 solvable, 9 unsolvable, 10 unknown, against 32/10/8 for one run. Seed 13's
+refutation needs more than 1.5M contiguous nodes to exhaust, and no slicing can
+give it that. At a fixed total budget of 3M the loss is worse — 31 wins become
+29 at k=4 and 27 at k=16. Across every Klondike run here **one restart decided
+one deal**, against 19 to 26 per Gypsy run.
+
+**Why the two games differ, and it is the useful part.** Gypsy's winning lines
+run 1,301 to 99,982 moves; Klondike's run 136 to 467. A Gypsy win is a plunge
+the search either walks into or misses, which is the heavy-tailed profile
+restarts exist for. Klondike's unknown deals are not committed to the wrong
+subtree — they are simply large, and its decided deals include ten refutations,
+which are exactly what restarts cannot help: exhausting a game needs contiguous
+budget. **`DESIGN.md`'s hypothesis was right about Gypsy and wrong about
+Klondike, and it was stated about Klondike.**
+
+**Consequence for the validation gate: it does not move.** The 5% gate is
+defined on Klondike, restarts do nothing for Klondike, and the bracket is
+unchanged. What moved is the arm that publishes.
+
+**And a caveat that comes with a per-game policy.** If Gypsy production runs use
+restarts and Klondike validation does not, the validated configuration is not
+the one that publishes, which is the thing `CLAUDE.md` built the whole Klondike
+arm to avoid. The answer is to run the thousand-deal validation under the same
+policy and report both numbers, accepting that Klondike's bucket is slightly
+larger with restarts on. That is a cost worth paying to validate what is
+actually run; it is not a reason to turn the lever off for Gypsy.
+
+**What this re-opens.** The two-deck safe-foundation rule was held back earlier
+today for exactly one reason: it lost seed 15, a lucky descent. Under restarts
+that is no longer the test — a rule can no longer be judged by whether it
+preserves one first descent. Re-measuring it with restarts on is the obvious
+next piece of work, and it is now a fair test rather than a lottery.
+
+## 2026-09-16 — The two-deck safe-foundation rule ships, because restarts made the test fair
+
+**Status:** firm. Reverses the hold in *The two-deck safe-foundation rule:
+derived, measured, and held back* (earlier today), which stands as the record of
+why it was held and of the derivation it rests on.
+
+That entry held the rule back for one reason: it cost seed 15, the only deal the
+Gypsy full arm had ever solved by itself — and that win was a 68,592-node first
+descent on a 38,068-move line, which is luck rather than search strength.
+Restarts make that test meaningless in the right direction: **a dominance can no
+longer be judged by whether it preserves one lucky descent.** Re-measured
+against the restart baselines, the rule clears the bar it failed this morning.
+
+**Gypsy, 50 deals, both arms, restarts on.** Baselines are the recorded
+`gypsy-both-{12M-restart8,48M-restart32}` runs; the new files carry
+`-safefoundation`.
+
+| Policy | arm | without | with |
+|---|---|---|---|
+| 12M as 8 x 1.5M | restricted | 44 solvable, 6 unknown | 44, 6 |
+| 12M as 8 x 1.5M | full | 44 solvable (0 by search), 6 unknown | **45 (1 by search), 5** |
+| 48M as 32 x 1.5M | restricted | 46, 4 | 46, 4 |
+| 48M as 32 x 1.5M | full | 46 (0 by search), 4 | 46 (0 by search), 4 |
+
+**No verdict contradicted and none regressed**, at either budget, in either arm
+— seed 15 included, which is the whole point. Nodes are flat to 1.3% down. The
+restricted arm is untouched to the node, as it must be: the worry-back condition
+implies the no-worry-back one, so this rule fires only where that arm already
+forced, and a test pins exactly that.
+
+**What it bought is one deal, and the deal is the interesting part.** Seed 0, at
+12M: the **full arm solved it by itself**, 9,051,762 nodes, an 843-move line,
+found on the seventh slice — while the restricted arm leaves it unknown in the
+same run. That is the third deal the worry-back search has ever cracked without
+the carry, after 15 and 45. It is a candidate for a deal that *needs* worry-back
+and is not proof of one: the restricted arm returns `unknown`, not a refutation,
+and this deal set still proves nothing unsolvable.
+
+**Why ship for one deal.** Because it is the arm that publishes, because the
+cost is nothing measurable, and because deals the full arm cracks on its own are
+the only evidence the headline figure can ever be built from — there are three
+of them in the project's history and this rule produced one. The 2026-09-14
+precedent that killed two dominances killed them for changing *nothing*: node
+counts identical to the node. This one changes a verdict in the right direction
+and never changes one in the wrong direction.
+
+**Klondike keeps it too, and its policy is restarts off**, since restarts do
+nothing for that game and finer slices cost it refutations. The measurement
+there stands from this morning — no verdict contradicted at 3M or 12M, nodes
+down 31.8% and 20.3%, 29 of 31 lines unchanged in length — and both arms
+reproduce their recorded runs exactly under the re-applied code.
+
+**Still owed, and it is the one thing this entry does not close.** Two
+dominances that are each sound need not be sound together, and this one composes
+with the split-run rule at every position. Blake & Gent have a compatibility
+theorem for exactly this pair and it is single-deck like the rest of Appendix
+B.1. Every number above was measured with both rules on, so the evidence covers
+the pair; the argument does not. If a later run contradicts a verdict, that
+composition is where to look, after the gates.

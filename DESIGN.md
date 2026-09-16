@@ -243,14 +243,18 @@ budget-exhausted.
       decided in both arms. No verdict contradicted; 22.5% fewer nodes; one
       deal newly proved. See the hole below, now closed.
 
-      **Still open for the worry-back game.** The proof needs the
-      opposite-colour cards to be on foundations and unable to leave, and
-      worry-back is exactly the rule that lets them leave. The repair that
-      suggests itself — play it up, worry it back if it is ever wanted — is
-      circular under a transposition table and is written up in
-      `DECISIONS.md` so nobody re-derives it. A worry-back-legal form does
-      exist in the literature, at a stronger threshold, but is proved for a
-      single deck only; see `docs/research/prior-art.md`.
+      **The worry-back game got its own form, 2026-09-16.** The proof above
+      needs the opposite-colour cards to be on foundations and unable to
+      leave, and worry-back is exactly the rule that lets them leave; the
+      repair that suggests itself — play it up, worry it back if it is ever
+      wanted — is circular under a transposition table and is written up in
+      `DECISIONS.md` so nobody re-derives it. The rule that *does* hold with
+      worry-back legal is Keller's, at stronger thresholds: opposite-colour
+      foundations within one rank, the same-colour twin within two, and — for
+      two decks, where the paper's proof stops and ours takes over — **both
+      slots of the card's own suit within one**, which is what stops the
+      duplicate breaking the reordering. Shipped after restarts made the test
+      fair; it gains the full arm seed 0, solved by itself in 843 moves.
 
    4. *Never split a built run to expose a dead card.* **Done 2026-09-16, and
       the first dominance the full game has ever had.** A move carrying a
@@ -261,6 +265,12 @@ budget-exhausted.
       one policy for single cards and groups that the theorem requires —
       standard Spider fails exactly there. Two gates of our own for Gypsy, an
       exhausted stock and a non-empty destination; Klondike needs neither.
+      **Both gates proved 2026-09-16**, by arguing Gypsy directly rather than
+      re-running the theorem: the card a cut move exposes and the card it lands
+      on are the same rank and colour, so a winning line that makes the move
+      can be rewritten into one that defers it to the moment the exposed card
+      is played up. An empty column has no such twin, and the stock deal is
+      addressed by column — which is what the gates are for.
 
       Measured before it was built: it removes 42% of the full arm's
       generated moves. Klondike's unknown bucket fell 34% to 18% at 3M,
@@ -334,7 +344,17 @@ Three things follow, in this order:
    still needed, the **capped arm**,
    `--worry-back-limit k` swept over *k*, as the fallback it was always meant
    to be: if the uncapped arm still resolves nothing, a lower
-   bound is the only form the worry-back delta can take. One constraint
+   bound is the only form the worry-back delta can take. **"Still needed" was
+   answered on 2026-09-16 and the answer is yes**: swept at 3M, 12M and 48M, the
+   uncapped full arm resolved *nothing* of its own above 5M, spending its entire
+   budget on every deal the restricted arm left it — 576M nodes across 12 deals
+   at 48M, none decided. Restarts and the safe-foundation rule have since moved
+   that a little: the worry-back search has now cracked **three** deals on its
+   own, 15, 45 and 0, against one before. It is still nowhere near a delta —
+   under restarts the full arm's totals are the restricted arm's plus seed 0, so
+   the **measured worry-back delta is one deal out of fifty**, and that one is a
+   candidate rather than a proof, since the restricted arm returns `unknown` on
+   it rather than a refutation. One constraint
    settled in advance — worry-backs spent is path state and the table stores
    positions, so an exhausted capped search proves *no win within k*, never
    `Unsolvable`. `Unsolvable` must map to `Unknown` in that arm.
@@ -368,6 +388,18 @@ are unproven rather than unavailable, and adopting either means extending the
 paper, with our own duplicate-card argument, exactly as our existing safe
 autoplay was proved rather than inherited.
 
+**Done 2026-09-16, held back, and then shipped.** The two-deck extension is
+proved — each threshold a minimum over the suit's two slots, plus a third
+condition on the card's own suit that duplicate cards force and a single deck
+never needs. It was held back for a day's afternoon because it cost seed 15, a
+lucky first descent; restarts made that test meaningless and it was re-measured
+against the restart baselines. Klondike: no verdict changed at 3M or 12M, nodes
+down 32% and 20%. Gypsy under restarts: nothing contradicted or regressed, and
+the full arm gains seed 0 — solved **by itself**, 843 moves, the third deal the
+worry-back search has ever cracked without the carry. Composition with the
+split-run rule is the one thing still owed: the paper's compatibility theorem
+for that pair is single-deck too.
+
 **The rule to take first is a different one: the incomplete-pile dominance**
 (Appendix B.2), which *is* generalised past a single deck — an incomplete built
 pile need only be moved when the card above it is built immediately to
@@ -377,16 +409,22 @@ which is exactly what standard Spider fails and we satisfy. Two hypotheses are
 unchecked — the deals-to-every-column stock, and whether the proof depends on
 foundations being irremovable — and neither is to be assumed.
 
-**Also open, and not a dominance:** in *Klondike's* full arm the wins are found
-either almost instantly or at enormous cost — twelve of 29 under 500 nodes,
-median 12,696, then a tail to 29.8M, while the eleven unknowns each burn 48M.
-That is the profile of a search committed to the wrong subtree near the root
-rather than one facing a graph slightly too large, and it is consistent with
-the 0.804 slope. If it holds up, randomised restarts under a fixed total budget
-are a lever that is not on that curve, and they cost nothing in rigour: a
-restart phase can only turn `unknown` into `solvable`, never claim
-`unsolvable`. Worth testing on the eleven unknown deals for the price of one
-48M run.
+**Tested 2026-09-16, and the answer splits by game: randomised restarts.** The
+hypothesis was that wins are found almost instantly or not at all — the profile
+of a search committed to the wrong subtree near the root — so several searches
+under different orderings should beat one long dig. `--restarts k` does exactly
+that, at no cost in rigour: a restart can turn `unknown` into a decision and can
+never turn a decision into anything else.
+
+**On Gypsy it is worth about four times the budget.** 48M spent as 32 slices
+leaves **4 of 50 unknown in both arms against 12 for a single 48M run**, for a
+third of the nodes, and 12M with restarts beats 48M without. **On Klondike it is
+worth nothing, and finer slices lose refutations**, which need contiguous budget
+to exhaust. The difference is line length: Gypsy wins are 1,301 to 99,982-move
+plunges the search walks into or misses, Klondike wins are 136 to 467 and its
+unknown deals are simply large. So the hypothesis was right about Gypsy and it
+was written about Klondike. The gate below does not move, because it is a
+Klondike gate. See `DECISIONS.md`.
 
 After all that: the 1,000-deal Klondike validation the gate below is written
 against, which `gypsy batch` is now built for.
@@ -426,21 +464,30 @@ rather than re-deriving:
 
 ### Do not run a Gypsy batch yet
 
-The Klondike unknown bucket stands at **18% on 50 deals at a 3M budget**
-(2026-09-16, split-run dominance). The run of it: 40% at 3M on 2026-09-13, 34%
-once the table probed, 22% at 3M's *sixteenfold* budget of 48M — and now 18% at
-3M again. While it is anywhere near this large the validation bracket spans tens
-of points, which is consistent with a correct search and cannot distinguish one
-from a search that misses wins systematically. It is 40.6 points wide today,
-against 65.8 before.
+The Klondike unknown bucket stands at **18% on 50 deals at a 3M budget**, and
+**12% at 48M** (2026-09-16, split-run dominance). The run of it: 40% at 3M on
+2026-09-13, 34% once the table probed, 22% at 3M's *sixteenfold* budget of 48M —
+and now 18% at 3M again, 12% at 48M. While it is anywhere near this large the
+validation bracket spans tens of points, which is consistent with a correct
+search and cannot distinguish one from a search that misses wins systematically.
+It is 40.6 points wide at 3M and 34.6 at 48M, against 65.8 before.
 
 **Budget will not close it; a dominance just did more than 16x the budget.**
-Swept at 3M, 12M and 48M, the bucket fell by a factor of about 0.804 per
-fourfold step, and the slope did not change when the table was fixed — the curve
-moved down, not round. Reaching the 5% gate that way needed roughly 10^4 times
-the budget. One dominance then beat the whole 3M-to-48M sweep at the original
-budget. That is the confirmation the route is dominances, and the sweep should
-be re-run on the current search before anyone plans around the old slope.
+Re-swept on the current search at 3M, 12M and 48M (2026-09-16): 18%, 16%, 12%
+unknown, a factor of **0.817 per fourfold step** against the 0.804 measured
+before either dominance existed. The slope has now survived two large
+improvements unchanged — the curve moves down, not round. What the dominance
+bought is height, and it is worth two orders of magnitude: the 5% gate is 400x
+the 48M budget away, 1.9x10^10 nodes per deal, where the old curve put it at
+4x10^4 times and 2x10^12.
+
+**Still out of reach, and the binding constraint is now memory rather than
+time.** 88 CPU-days would buy a thousand deals at that budget; a table sized to
+it at this sweep's own protocol is 1.7 TB per worker. At any affordable table
+the level stops being a measurement of budget and becomes one of eviction, so
+the extrapolation fails its own conditions before the gate: nothing on this
+curve is measurable much past 10^9 nodes per deal. The route is dominances, for
+the third time and now for a third reason.
 
 Two thresholds, and they are different:
 

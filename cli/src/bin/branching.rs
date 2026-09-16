@@ -83,7 +83,7 @@ fn walk(game: &Gypsy, seed: u64, steps: usize, tally: &mut Tally) {
     seen.insert(game.key(&state));
 
     for _ in 0..steps {
-        let moves = game.legal_actions(&state);
+        let moves = game.legal_actions(&state, 0);
         if moves.is_empty() {
             break;
         }

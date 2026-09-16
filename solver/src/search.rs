@@ -81,6 +81,9 @@ pub struct Config {
     pub max_depth: u32,
     /// Transposition table size, rounded up to a power of two.
     pub table_entries: usize,
+    /// Which move ordering to search under. Zero is the game's own; any other
+    /// value permutes the same actions. See [`solve_restarting`].
+    pub ordering_salt: u64,
 }
 
 impl Default for Config {
@@ -89,6 +92,7 @@ impl Default for Config {
             node_budget: 10_000_000,
             max_depth: 100_000,
             table_entries: Table::entries_in(256 << 20),
+            ordering_salt: 0,
         }
     }
 }
@@ -107,6 +111,9 @@ pub struct Report<A> {
     pub table_filled: usize,
     /// Why the search stopped, when it stopped early.
     pub limit: Option<Limit>,
+    /// How many restarts were run to get here; 1 for a plain search. A win
+    /// found on the first is a win the ordering walked straight into.
+    pub restarts_used: u32,
 }
 
 /// A solver bug, not a game outcome: the search claimed a win whose move list
@@ -161,6 +168,7 @@ pub fn solve<G: Game>(
         table_capacity: table.capacity(),
         table_filled: table.filled(),
         limit,
+        restarts_used: 1,
     };
 
     if game.is_won(start) {
@@ -169,7 +177,7 @@ pub fn solve<G: Game>(
 
     table.insert(game.key(start));
     let mut stack: Vec<Frame<G>> = vec![Frame {
-        moves: game.legal_actions(start),
+        moves: game.legal_actions(start, config.ordering_salt),
         state: start.clone(),
         next: 0,
     }];
@@ -224,7 +232,7 @@ pub fn solve<G: Game>(
         line.push(mv);
         table.insert(key);
         stack.push(Frame {
-            moves: game.legal_actions(&child),
+            moves: game.legal_actions(&child, config.ordering_salt),
             state: child,
             next: 0,
         });
@@ -249,6 +257,79 @@ pub fn solve<G: Game>(
     };
 
     Ok(finish(verdict, None, nodes, limit, &table))
+}
+
+/// Searches under a sequence of move orderings, splitting the budget between
+/// them, and stops at the first one that decides the deal.
+///
+/// # Why this exists
+///
+/// Wins in these games are found almost immediately or not at all: twelve of
+/// Klondike's 29 recorded wins took under 500 nodes and the median was 12,696,
+/// while the unknown deals each burn the whole budget. That is the profile of
+/// a search committed to the wrong subtree near the root, not of one facing a
+/// graph slightly too large — and budget does not fix it. Swept at 3M, 12M and
+/// 48M the unknown bucket falls by a factor of 0.817 per fourfold step, a
+/// slope that has now survived every improvement to the search.
+///
+/// A restart is the lever that is not on that curve. The same total budget,
+/// spent as several searches under different orderings, gives several chances
+/// at a lucky descent instead of one long dig in the same hole.
+///
+/// # What it costs in rigour: nothing
+///
+/// Each restart is a complete search in its own right, so its verdict means
+/// what it always meant. `Solvable` carries a line that is replayed before it
+/// is believed. `Unsolvable` is claimed only by a restart that exhausted the
+/// reachable game without touching a limit, which is a proof whatever ordering
+/// produced it. Restarts that spend their slice and decide nothing add up to
+/// `Unknown`, which is what they are. **A restart can turn `Unknown` into a
+/// decision and can never turn a decision into anything else.**
+///
+/// Salt zero goes first, so a single-restart run is exactly the search that
+/// came before this existed, and a multi-restart run begins with it.
+pub fn solve_restarting<G: Game>(
+    game: &G,
+    start: &G::Position,
+    config: Config,
+    restarts: u32,
+) -> Result<Report<G::Action>, UnverifiedSolution<G::Action>> {
+    let restarts = restarts.max(1);
+    let slice = (config.node_budget / u64::from(restarts)).max(1);
+    let mut nodes = 0;
+    let mut elapsed = Duration::ZERO;
+    let mut last: Option<Report<G::Action>> = None;
+
+    for attempt in 0..restarts {
+        let config = Config {
+            node_budget: slice,
+            ordering_salt: salt_for(attempt),
+            ..config
+        };
+        let mut report = solve(game, start, config)?;
+        nodes += report.nodes;
+        elapsed += report.elapsed;
+        report.nodes = nodes;
+        report.elapsed = elapsed;
+        report.restarts_used = attempt + 1;
+        if report.verdict != Verdict::Unknown {
+            return Ok(report);
+        }
+        last = Some(report);
+    }
+
+    Ok(last.expect("at least one restart runs"))
+}
+
+/// The ordering salt for restart `attempt`. Zero for the first, so the game's
+/// own order is always tried before any shuffled one.
+fn salt_for(attempt: u32) -> u64 {
+    if attempt == 0 {
+        0
+    } else {
+        // Odd multiplier, so no later attempt can land back on zero.
+        u64::from(attempt).wrapping_mul(0x9E37_79B9_7F4A_7C15)
+    }
 }
 
 /// Replays a line from the opening position and checks that it wins.

@@ -32,7 +32,8 @@ use std::time::Duration;
 use clap::{Args, ValueEnum};
 use gypsy_core::{MoveOptions, State};
 use gypsy_solver::{
-    replay, solve, Config, Game, Gypsy, Limit, Report, Table, UnverifiedSolution, Verdict,
+    replay, solve_restarting, Config, Game, Gypsy, Limit, Report, Table, UnverifiedSolution,
+    Verdict,
 };
 use klondike::{Klondike, Position};
 
@@ -89,6 +90,14 @@ pub struct BatchArgs {
     /// runs and never weaker: see `solve_both`.
     #[arg(long)]
     both_arms: bool,
+    /// Searches per deal, splitting the budget between them and reordering
+    /// the moves each time.
+    ///
+    /// The total work per deal is unchanged; what changes is that a deal gets
+    /// several chances at a lucky descent instead of one. A restart can only
+    /// turn `unknown` into a decision — see `gypsy_solver::solve_restarting`.
+    #[arg(long, default_value_t = 1)]
+    restarts: u32,
     /// Record the winning line in full, not just its length.
     #[arg(long)]
     lines: bool,
@@ -331,6 +340,7 @@ impl<A> Answer<A> {
                 table_capacity: 0,
                 table_filled: 0,
                 limit: None,
+                restarts_used: 0,
             },
             from,
         }
@@ -437,8 +447,9 @@ fn solve_both<G: Game>(
     full: &G,
     start: &G::Position,
     config: Config,
+    restarts: u32,
 ) -> Result<BothAnswers<G>, UnverifiedSolution<G::Action>> {
-    let restricted_report = solve(restricted, start, config)?;
+    let restricted_report = solve_restarting(restricted, start, config, restarts)?;
 
     if restricted_report.verdict == Verdict::Solvable {
         let line = restricted_report
@@ -454,7 +465,7 @@ fn solve_both<G: Game>(
         ));
     }
 
-    let full_report = solve(full, start, config)?;
+    let full_report = solve_restarting(full, start, config, restarts)?;
 
     // Only an `Unknown` is worth upgrading; a restricted arm that refuted the
     // deal itself already has the stronger result of its own.
@@ -546,6 +557,7 @@ pub fn run(args: BatchArgs) -> Result<(), Box<dyn std::error::Error>> {
         node_budget: args.budget,
         max_depth: args.max_depth,
         table_entries: Table::entries_in(args.table_mib << 20),
+        ordering_salt: 0,
     };
     let sink = Mutex::new(BufWriter::new(
         OpenOptions::new()
@@ -617,7 +629,7 @@ fn record_of<A: Display>(
         concat!(
             r#"{{"game":"{}","seed":{},"ruleset":"{}","verdict":"{}","verdict_from":"{}","#,
             r#""limit":"{}","nodes":{},"line_length":{},"elapsed_ms":{},"node_budget":{},"#,
-            r#""max_depth":{},"table_capacity":{},"table_filled":{}{}}}"#,
+            r#""max_depth":{},"table_capacity":{},"table_filled":{},"restarts_used":{}{}}}"#,
             "\n"
         ),
         game_name,
@@ -633,6 +645,7 @@ fn record_of<A: Display>(
         config.max_depth,
         report.table_capacity,
         report.table_filled,
+        report.restarts_used,
         line,
     )
 }
@@ -672,11 +685,12 @@ where
 
             let start = deal(seed);
             let answers = match arms {
-                Arms::One { game, .. } => {
-                    solve(game, &start, config).map(|report| vec![Answer::searched(report)])
+                Arms::One { game, .. } => solve_restarting(game, &start, config, args.restarts)
+                    .map(|report| vec![Answer::searched(report)]),
+                Arms::Both { restricted, full } => {
+                    solve_both(restricted, full, &start, config, args.restarts)
+                        .map(|(restricted, full)| vec![restricted, full])
                 }
-                Arms::Both { restricted, full } => solve_both(restricted, full, &start, config)
-                    .map(|(restricted, full)| vec![restricted, full]),
             };
             let answers = match answers {
                 Ok(answers) => answers,
@@ -884,6 +898,7 @@ mod tests {
             node_budget: 200_000,
             max_depth: 100_000,
             table_entries: Table::entries_in(16 << 20),
+            ordering_salt: 0,
         }
     }
 
@@ -894,7 +909,7 @@ mod tests {
     fn a_restricted_win_is_carried_into_the_full_arm() {
         let restricted = Gypsy::new(MoveOptions::NO_WORRY_BACK);
         let full = Gypsy::new(MoveOptions::ALL);
-        let (left, right) = solve_both(&restricted, &full, &State::deal(21), cheap())
+        let (left, right) = solve_both(&restricted, &full, &State::deal(21), cheap(), 1)
             .expect("the carried line replays in the full game");
 
         assert_eq!(left.report.verdict, Verdict::Solvable);
@@ -925,7 +940,8 @@ mod tests {
     #[test]
     fn a_searched_verdict_is_labelled_search() {
         let restricted = Gypsy::new(MoveOptions::NO_WORRY_BACK);
-        let report = solve(&restricted, &State::deal(21), cheap()).expect("seed 21 solves");
+        let report =
+            solve_restarting(&restricted, &State::deal(21), cheap(), 1).expect("seed 21 solves");
         let text = record_of(
             "gypsy",
             21,
