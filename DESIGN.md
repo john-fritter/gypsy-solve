@@ -402,17 +402,22 @@ which is exactly what standard Spider fails and we satisfy. Two hypotheses are
 unchecked — the deals-to-every-column stock, and whether the proof depends on
 foundations being irremovable — and neither is to be assumed.
 
-**Also open, and not a dominance:** in *Klondike's* full arm the wins are found
-either almost instantly or at enormous cost — twelve of 29 under 500 nodes,
-median 12,696, then a tail to 29.8M, while the unknowns — eleven then, six on
-the current search — each burn the whole 48M.
-That is the profile of a search committed to the wrong subtree near the root
-rather than one facing a graph slightly too large, and it is consistent with
-the slope surviving every improvement to the search. If it holds up, randomised restarts under a fixed total budget
-are a lever that is not on that curve, and they cost nothing in rigour: a
-restart phase can only turn `unknown` into `solvable`, never claim
-`unsolvable`. Worth testing on the eleven unknown deals for the price of one
-48M run.
+**Tested 2026-09-16, and the answer splits by game: randomised restarts.** The
+hypothesis was that wins are found almost instantly or not at all — the profile
+of a search committed to the wrong subtree near the root — so several searches
+under different orderings should beat one long dig. `--restarts k` does exactly
+that, at no cost in rigour: a restart can turn `unknown` into a decision and can
+never turn a decision into anything else.
+
+**On Gypsy it is worth about four times the budget.** 48M spent as 32 slices
+leaves **4 of 50 unknown in both arms against 12 for a single 48M run**, for a
+third of the nodes, and 12M with restarts beats 48M without. **On Klondike it is
+worth nothing, and finer slices lose refutations**, which need contiguous budget
+to exhaust. The difference is line length: Gypsy wins are 1,301 to 99,982-move
+plunges the search walks into or misses, Klondike wins are 136 to 467 and its
+unknown deals are simply large. So the hypothesis was right about Gypsy and it
+was written about Klondike. The gate below does not move, because it is a
+Klondike gate. See `DECISIONS.md`.
 
 After all that: the 1,000-deal Klondike validation the gate below is written
 against, which `gypsy batch` is now built for.
