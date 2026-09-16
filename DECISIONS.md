@@ -1464,3 +1464,159 @@ needs seed matching, budget and ruleset validation, and a policy for missing
 seeds — more plumbing and more ways to be wrong — and it still forces two
 sequential runs to get what one run now does. Solving the pair together is what
 makes the carry free.
+
+## 2026-09-15 — The worry-back dominance exists and is published; we were re-deriving it
+
+**Status:** firm as a finding. The ports it calls for are not yet made.
+
+After the Gypsy full arm resolved 0 of 50, the plan asked for more dominances
+and had no candidate to offer. Before deriving one, the reference solvers were
+read. Full survey in `docs/research/prior-art.md`; this entry records what it
+changes.
+
+**`DESIGN.md` was wrong, and is corrected.** It said the worry-back game "still
+has no dominance at all" and that any next rule "has to be a different shape of
+argument". Two rules for exactly this case are published with proofs and ship in
+both [Solvitaire](https://github.com/thecharlieblake/Solvitaire) and
+[lonelybot](https://github.com/vuonghy2442/lonelybot):
+
+- **Keller's rule** — with worry-back legal, a playable card of rank *r* and
+  colour *c* is forcible when `f(both opposite-colour suits) >= r - 1` **and**
+  `f(the other suit of colour c) >= r - 2`. Blake & Gent, Appendix B.1.
+- **The worry-back ban** — never worry a card back while it is
+  safe-automovable. A corollary of their Theorem 1, so it needs no separate
+  compatibility proof with the rule above.
+
+The twin conjunct is the whole difference from ours, and it is why ours needed
+the worry-back gate. lonelybot's documentation is explicit that `r - 2` is the
+classical condition *for worry-back games*, not a relaxation.
+
+**Why this was missed.** `DESIGN.md` has cited Solvitaire since day one, for the
+81.945% figure and for the warning that worry-back invalidates safe autoplay. It
+took that warning as the end of the story. The same paper contains the repaired
+rule. Reading the reference implementation should have come before the third
+derivation attempt, not after.
+
+**What is genuinely ours to prove.** Solvitaire switches foundation dominances
+off outright for two-deck games — `if (rules.two_decks) return false;` is the
+first line of `get_dominance_move` — and lonelybot is single-deck. So the
+published proofs are one-deck proofs. The two-deck forms need the same treatment
+we already gave our own safe autoplay: each `f(...)` becomes a minimum over that
+suit's two foundation piles. That is a port with a template, which is a very
+different problem from the open-ended search this project thought it faced.
+
+**A discrepancy in the rule already shipped, to resolve rather than assume
+away.** The no-worry-back variant is quoted upstream as `f_opp >= r`; ours uses
+`f_opp >= r - 1`. Rank indexing differs between codebases and these may be the
+same statement, but ours being one rank more permissive is the direction that
+loses wins. Klondike validation contradicted no verdict, which is real evidence
+against a bug — it is not a substitute for checking the condition.
+
+**Confirmed independently, and we are ahead on one point.** Solvitaire disables
+pile symmetry whenever the stock deals to tableau piles, with the comment "If
+the stock deals to the tableau piles, there is no pile symmetry" — our
+2026-09-11 finding, reached separately. Their gate is coarser: they disable it
+for the whole game, where we gate on the stock being *currently* empty and
+recover the symmetry for the endgame, which is where most of the search sits.
+
+**Suit symmetry is dropped as a candidate.** It was proposed as an
+already-argued, unimplemented win. Solvitaire classifies it as a *streamliner* —
+their word for an unsound speedup — because what it implements is collapsing
+suit to colour in the cache key, which conflates positions that per-suit
+foundations distinguish. That is the exact situation John raised from play:
+needing to expose the particular suit a foundation wants while its same-colour
+partner shows. The sound version is a full consistent relabelling, which
+lonelybot carries as "twin-swap theorem T" and its own soundness ledger rates
+`[~] argued with named gaps`. Unproven at the state of the art, undetectable if
+wrong on a deal set that proves nothing unsolvable, and no longer the best rule
+available. Not worth the risk.
+
+**Rejected: copying code.** Solvitaire is GPL-2 and this repo is not. Nothing is
+lifted from it. What transfers is published rules and their proofs, rewritten
+here for two decks, which is what `CLAUDE.md`'s one-implementation constraint
+requires anyway.
+
+**Recorded about the environment, because it shaped the survey.** arxiv, JAIR,
+Dagstuhl and Semantic Scholar are all blocked by this session's egress proxy;
+only GitHub is reachable. Everything above is read out of source and repo
+documentation, not the papers. The rule statements should be checked against
+Blake & Gent by someone who can open it before either port is called proven.
+
+## 2026-09-15 — The paper answers back: two decks are outside its proof, and a different rule is the one to take
+
+**Status:** firm. Supersedes the recommendation in *The worry-back dominance
+exists and is published* (earlier today), which stands as a record of what was
+believed from source code alone.
+
+Gizmo retrieved Blake & Gent and answered the questions in
+`docs/research/literature-questions.md`; the report is
+`docs/reports/literature-brief-20260915T203648Z.md`. Two of this morning's
+conclusions were wrong.
+
+**Wrong 1: "port Keller's rule to two decks" was presented as licensed by the
+paper. It is not.** The safe-foundation theorem excludes multiple decks in
+terms:
+
+> we assume that we do not have multiple decks: i.e. while the theorem applies
+> to a single deck with eight different suits of two colours, it does not apply
+> to a game with two copies of the standard deck. The occurrence of duplicate
+> cards leads to potential edge cases that we do not consider in this proof.
+
+Solvitaire's `if (rules.two_decks) return false;` is that boundary enforced, not
+an engineering shortcut as the earlier entry guessed. The worry-back ban is a
+corollary of the same theorem and inherits the restriction. **Unproven for two
+decks, not disproven** — but a port would be an extension of the paper, not an
+application of it, and must be argued as such.
+
+**Wrong 2: the flag raised against our own shipped rule is withdrawn.** The
+paper gives two ways to qualify. With worry-back allowed: opposite-colour
+foundations within two ranks and the same-colour twin within three. With
+worry-back suppressed, *additionally*: opposite-colour foundations within one
+rank. Our `never_wanted_in_the_tableau` implements the second, generalised from
+two suit foundations to our four slots, against foundations stored as top rank
+with 0 for empty — which is the paper's convention. It is the published
+condition, not a permissive variant of it. **No correction owed.**
+
+It is however *weaker* than the published rule, because we implement only one of
+the two disjuncts. Adding the first would prune more in the restricted arm, and
+needs the twin condition proved for four slots the way the current one was.
+
+**What we should take instead: the incomplete-pile dominance (Appendix B.2),
+which the earlier survey missed entirely.** Unlike the safe-foundation theorem
+it is deliberately generalised past a single deck — the paper's own worked
+example is five identical decks. It says an incomplete built pile need only be
+moved when the card above it is then built immediately to foundation.
+
+Its hypotheses want an "indistinguishable" build policy, where two cards have
+identical or disjoint build destinations and the same policy governs single-card
+and group moves. **Gypsy appears to qualify precisely because of the permissive
+variant `CLAUDE.md` forbids correcting away:** any alternating-colour sequence
+moves as a unit, so group and single-card policies agree. The paper explicitly
+excludes standard Spider for failing exactly that test — its singles move by any
+suit, its groups only by one.
+
+Two hypotheses are unchecked and are not to be assumed: whether a stock that
+deals to every column counts as "a rule invalidating moves by constraints on
+their order", and whether the proof hides a dependence on foundations being
+irremovable. The first is the same hazard that killed two dominances on
+2026-09-11 and deserves the same suspicion.
+
+**Answered, and it closes a `DESIGN.md` open question: no published Gypsy
+figure exists.** A clean negative across the paper, the solver presets and a
+bibliographic search — no peer-reviewed, preprint or solver-source winnability
+figure for Gypsy or Gipsy. The one hit is a 2019 WPI report that generates the
+game rather than measuring it, and is explicitly not peer reviewed. The close
+relatives are genuinely distinct games and their figures do not transfer.
+
+**Calibration, which is the sobering part.** The paper reports two two-deck
+games. Mrs Mop resolves to 0.12% unknown over two million instances, so two
+decks alone do not make a game intractable. Spider — two decks *and* a stock
+dealing to every column, which is Gypsy's mechanic — is their worst resolved
+fraction by a factor of twenty, at 2.69% unknown over ten thousand. Gypsy is in
+the harder family and additionally cannot use the foundation dominances.
+
+**Recorded about method, because it cost a day.** The first survey was built
+from solver source because the papers were unreachable, and source is precise
+about *what* a rule is while silent about *what it assumes*. Both errors above
+are of that kind: a threshold read correctly, a hypothesis invisible. Where a
+proof boundary matters, read the proof.

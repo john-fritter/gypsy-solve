@@ -308,13 +308,15 @@ Three things follow, in this order:
    deals at 5M: the full arm goes from **0 of 50 resolved to 12**, for 13.4%
    fewer nodes, and both arms reproduce the separate runs exactly. See
    `DECISIONS.md`.
-2. **The capped arm**, `--worry-back-limit k` swept over *k*, which is now the
-   primary instrument for the headline number rather than a fallback: if the
-   uncapped arm resolves nothing, a lower bound is the only form the
-   worry-back delta can take. One constraint settled in advance — worry-backs
-   spent is path state and the table stores positions, so an exhausted capped
-   search proves *no win within k*, never `Unsolvable`. `Unsolvable` must map
-   to `Unknown` in that arm.
+2. **Check Gypsy against the incomplete-pile theorem's hypotheses** and, if it
+   qualifies, implement it: a published multi-deck-general dominance, and the
+   first the full game would ever have. Then the **capped arm**,
+   `--worry-back-limit k` swept over *k*, as the fallback it was always meant
+   to be: if the uncapped arm still resolves nothing, a lower
+   bound is the only form the worry-back delta can take. One constraint
+   settled in advance — worry-backs spent is path state and the table stores
+   positions, so an exhausted capped search proves *no win within k*, never
+   `Unsolvable`. `Unsolvable` must map to `Unknown` in that arm.
 3. **Then re-measure.** Whether the delta is even visible between *k*=0 and
    small *k* decides whether the headline finding survives in any form.
 
@@ -327,12 +329,32 @@ each burning the whole budget. A cap makes the search drown in the breadth of a
 game where any alternating-colour sequence moves as a unit; uncapped it drowns
 in depth. See `DECISIONS.md`.
 
-**A dominance that survives worry-back** remains open and remains the only
-thing that would move the full arm without bounding it. Nothing on the current
-list is a candidate: the reordering argument that carries safe autoplay needs a
-card to be out of reach once it is up, which is the one thing worry-back
-denies, so the next rule has to be a different shape of argument rather than a
-repair of this one.
+**A dominance that survives worry-back exists and is published — but not for two
+decks.** Corrected twice on 2026-09-15: first against the reference solvers,
+then against the paper itself. See `docs/research/prior-art.md` and the report
+in `docs/reports/`.
+
+Blake & Gent's safe-foundation rule does hold with worry-back legal, at a
+stronger threshold than the no-worry-back one: opposite-colour foundations
+within two ranks *and* the same-colour twin within three. A **worry-back ban**
+comes with it as a corollary — never worry back a card that would immediately
+be safely buildable again.
+
+**Both are proved for a single deck only, and the paper says so outright:**
+duplicate cards "lead to potential edge cases that we do not consider in this
+proof". Solvitaire's two-deck guard is that boundary enforced. For Gypsy these
+are unproven rather than unavailable, and adopting either means extending the
+paper, with our own duplicate-card argument, exactly as our existing safe
+autoplay was proved rather than inherited.
+
+**The rule to take first is a different one: the incomplete-pile dominance**
+(Appendix B.2), which *is* generalised past a single deck — an incomplete built
+pile need only be moved when the card above it is built immediately to
+foundation. Gypsy looks to qualify because of the permissive group-move rule:
+its hypotheses want single-card and group moves to follow the same policy,
+which is exactly what standard Spider fails and we satisfy. Two hypotheses are
+unchecked — the deals-to-every-column stock, and whether the proof depends on
+foundations being irremovable — and neither is to be assumed.
 
 **Also open, and not a dominance:** in *Klondike's* full arm the wins are found
 either almost instantly or at enormous cost — twelve of 29 under 500 nodes,
@@ -435,7 +457,12 @@ than shipping one large bundle.
 - What node budget makes the unknown bucket acceptably small?
 - Is the correct worry-back dominance provable here, or only a conservative
   approximation?
-- Confirm no published Gypsy winnability figure exists before claiming novelty.
+- ~~Confirm no published Gypsy winnability figure exists before claiming
+  novelty.~~ **Answered 2026-09-15: none exists.** A clean negative across the
+  paper, Solvitaire's presets and a bibliographic search. The one hit generates
+  Gypsy rather than measuring it and is explicitly not peer reviewed. The close
+  relatives — Irmgard, Blockade, Miss Milligan, Gargantua, Spider — are
+  distinct games whose figures do not transfer. See `docs/reports/`.
 - Does the mobile app's shuffle look uniform? (Probably unanswerable without
   extracting deals from it — leave it out unless there's a clean way.)
 - Where does the full batch actually run? fritter.lol as it stands cannot host a
