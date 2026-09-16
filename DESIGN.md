@@ -308,9 +308,14 @@ Three things follow, in this order:
    deals at 5M: the full arm goes from **0 of 50 resolved to 12**, for 13.4%
    fewer nodes, and both arms reproduce the separate runs exactly. See
    `DECISIONS.md`.
-2. **Check Gypsy against the incomplete-pile theorem's hypotheses** and, if it
-   qualifies, implement it: a published multi-deck-general dominance, and the
-   first the full game would ever have. Then the **capped arm**,
+2. ~~**Check Gypsy against the incomplete-pile theorem's hypotheses.**~~
+   **Done 2026-09-16.** It qualifies, behind two gates of our own — an empty
+   stock and a non-empty destination — and is implemented for both games. The
+   Gypsy full arm goes from **0 of 50 resolved to 29** and solved its first
+   deal by itself; Klondike's unknown bucket falls from 34% to 18% at 3M,
+   better than the old search reached at 48M, with three new unsolvable
+   proofs and no verdict contradicted. See `DECISIONS.md`. Next, only if
+   still needed, the **capped arm**,
    `--worry-back-limit k` swept over *k*, as the fallback it was always meant
    to be: if the uncapped arm still resolves nothing, a lower
    bound is the only form the worry-back delta can take. One constraint
@@ -381,9 +386,16 @@ rather than re-deriving:
   `legal_actions`. There is deliberately no runtime toggle: a dominance that
   can be switched off is one nobody has committed to.
 - Run both arms over the same seeds and budget and compare per seed. The bar
-  is: **no verdict contradicted, none regressed to `unknown`, and identical
-  line lengths on the deals solvable in both.** Node counts are the payoff,
-  not the test.
+  is: **no verdict contradicted and none regressed to `unknown`.** Node counts
+  are the payoff, not the test.
+- **Identical line lengths are a bar only for a rule that *forces* a move**,
+  such as safe autoplay, where the move was already first in the ordering and
+  the first descent barely moves. A rule that *removes* moves sends the search
+  down a different path and will return different — in practice much shorter —
+  winning lines. That is not a failure: every line is replayed from the deal
+  before it is believed, and a shorter line is evidence the search stopped
+  wandering. Amended 2026-09-16, when the split-run rule cut every Klondike
+  line it touched, one from 1,351 moves to 231.
 - The test that has teeth is the deals proved **unsolvable**, because that is
   the direction a discarded winning line fails in. A set that proves none —
   as the Gypsy no-worry-back set does — cannot catch the error at all, which
