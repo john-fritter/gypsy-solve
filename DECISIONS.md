@@ -2579,3 +2579,116 @@ where deals still resolve and the tableau is tighter per rank. It was started
 here and abandoned for wall clock on a shared box; it belongs on fritter.lol.
 Refutations are not required for that test — a false `unsolvable` on a solvable
 deal is detectable at any cap where the search resolves.
+
+---
+
+## 2026-09-17 — Safe autoplay loses its shortcut for twos, in both games
+
+**Status:** firm. Fixes the unsoundness found in *Reduced deals give Gypsy its
+first refutations* (earlier today) and supersedes the diagnosis in it.
+
+The rule opened:
+
+```rust
+if card.rank() <= 2 { return true; }
+```
+
+on the argument that nothing stacks on an ace, and the only card that stacks on
+a two is an ace, which never *needs* a base because a foundation slot of its
+suit is always free to take it.
+
+**The argument proves the ace is never stuck. It does not prove the ace has no
+use for the two, and those are different claims.** Playing an ace onto a two is
+a legal build, and it is sometimes the move that wins — it leaves the foundation
+alone, and advancing the foundation is what loses. A move that is never *forced*
+still has to be *available*. The shortcut treated "has somewhere else to go" as
+"is not wanted here", and that step does not hold.
+
+**The fix is to delete the shortcut and let the general condition run.** Aces
+still qualify with the foundations empty, by the arithmetic rather than by a
+special case: `wanted = rank - 1` is 0 for an ace, and every pile is at 0 or
+better, which is exactly the statement that nothing stacks on an ace. A two now
+requires every opposite-colour pile to have reached the ace — for Gypsy all four
+of them, since two decks give each suit two slots. That is the same argument the
+rest of the rule rests on, applied at the bottom of the deck where it had been
+skipped.
+
+**The correction in the earlier entry's diagnosis.** That entry said the
+divergence was "at move 4, where nine moves are rules-legal and the rule offers
+one". That was where the recorded *line* stopped being offered, which is not the
+same thing — a forcing rule may reject a line whenever some other winning line
+survives, and at that position every one of the nine moves still won. The real
+failure is three positions later in the walk. **Withdraw that sentence**; the
+counterexamples below are the evidence.
+
+**The counterexamples**, found by walking each deal under a sound search and
+asking at every forced position whether the forced child still wins. In each the
+rule forces a two and every other move wins:
+
+| Deal (cap 4) | forced | position |
+|---|---|---|
+| seed 47318 | 2c | one of nine moves; seven of the other eight win |
+| seed 66930 | 2c | **two 2c are available and only the other one wins** |
+| seed 179898 | 2s | one of seven; five of the other six win |
+
+Seed 66930 is the sharpest: two copies of the same card are playable to the same
+foundation, and the rule takes the first. One wins and one loses, so even
+"playing a safe card is free" fails — with duplicate cards it is not one move
+but a choice of moves, and the choice is not free.
+
+### Re-measured
+
+**Gypsy, rank cap 4, 200,000 deals, both arms.** The four false refutations are
+gone; the 23 genuine ones all stand; no new refutation appeared; the two arms
+now agree exactly. This is the measurement the fix exists for.
+
+| | before | after |
+|---|---:|---:|
+| restricted arm refutations | 27 (4 false) | **23** |
+| full arm refutations | 23 | 23 |
+| arms disagreeing | 4 | **0** |
+
+**Klondike full arm: identical to the node** over 50 deals at 3M. Safe autoplay
+fires only with worry-back suppressed, so the arm carrying the published figure
+never touched this rule — the thousand-deal validation stands unchanged.
+
+**Klondike restricted arm, 50 deals at 3M**: 31 solvable either way, and one
+verdict moves — seed 44 goes `unsolvable` to `unknown`. **Nothing is
+contradicted.** Re-solved at 200M it is unsolvable in 3,087,433 nodes, just over
+the 3M budget: the old verdict was right and the fix only made it unaffordable
+at that budget. Nodes +3.4%.
+
+**Gypsy, 50 deals at 3M, both arms** — the cost on the arm that publishes.
+**Nothing changed and nodes are up 1.0%**, 1.576e8 to 1.592e8: 25 solvable and
+25 unknown in each arm, before and after, deal for deal. The forced twos were,
+in the main, moves the search was going to make first anyway, which is why
+removing a rule that fired constantly costs almost nothing. The 12M restart-8
+configuration is queued for fritter.lol and is the one to watch: it resolves
+far more deals, so it has more room to differ.
+
+### What this does and does not cost
+
+**No recorded Gypsy verdict was ever a false `unsolvable`**, because at thirteen
+ranks the restricted arm has never proved anything unsolvable at all. What the
+rule did instead was throw wins away, which surfaces as `unknown` — so the
+Gypsy solvable counts in this repo were lower bounds a little lower than they
+should have been, and the correction can only move them up.
+
+**Klondike's numbers are unaffected where they are published and barely affected
+where they are not.** The one refutation that slipped past a budget is a
+resolution cost, not an error.
+
+**Klondike had the same shortcut and no counterexample of its own.** It is
+single-deck, so seed 66930's two-copies failure cannot happen there, but the
+first and third counterexamples do not depend on duplicates — they depend on an
+ace being worth playing onto a two. The argument the Klondike version states is
+the one-deck wording of the argument that was refuted next door, so the shortcut
+is gone from both games. Removing a step nobody can defend is cheaper than
+keeping it and hoping.
+
+**What the deal set is worth, revised upward.** *Reduced deals* called cap 4 a
+smoke test, on the evidence that it caught a gross mutation and missed a
+one-rank one. It also caught a real, shipped, subtle bug that a week of Klondike
+validation and 200,000 Klondike deals did not. A test set that finds one true
+defect has earned more than the calibration table gave it. The narrowness stands
+and so does the next axis: fewer columns.

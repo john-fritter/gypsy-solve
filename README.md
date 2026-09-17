@@ -79,6 +79,12 @@ opposite-colour foundation piles because two decks give each suit two; Klondike
 checks two, and additionally excludes the waste, because playing a card off it
 re-aligns every later draw-three.
 
+An ace qualifies with the foundations empty, because nothing stacks on an ace. A
+two does not: until every opposite-colour ace is up, one may still want to sit on
+it. Both games waved twos through until 2026-09-17, when the rank-4 deal set
+produced deals the restricted arm wrongly proved unsolvable — see
+`DECISIONS.md`.
+
 **Safe foundation plays with worry-back legal**, in both games. A card whose
 opposite-colour foundations are within a rank, whose same-colour twin suit is
 within two, and — for Gypsy, where duplicate cards force it — whose own suit's
@@ -261,11 +267,10 @@ genuinely unsolvable — one in about 8,700, the same 23 in both arms. Those are
 the only positions that test a Gypsy dominance in the direction it fails.
 
 **The first thing they found was a bug in a shipped dominance.** Safe autoplay
-proves four of those 200,000 deals `unsolvable` when they are winnable; seed
-104720 has a 39-move win that uses no worry-back at all, which the restricted
-arm must find and does not. See `DECISIONS.md` — the rule has not been changed
-yet, and every Gypsy solvable count in this repo is a lower bound that is lower
-than it should be.
+proved four of those 200,000 deals `unsolvable` when they are winnable, because
+it waved every two straight to the foundation. Fixed the same day, in both
+games; the four now come back solvable and the 23 genuine refutations stand. See
+`DECISIONS.md`.
 
 `--top-rank 5` and above resolve too, but the refutations disappear: more ranks
 make the game *more* winnable, not less, because the tableau stays eight columns

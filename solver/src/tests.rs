@@ -318,11 +318,9 @@ fn capped_deals_resolve_in_both_arms() {
 /// two as a base. That argument is what licenses the rule at every rank cap,
 /// the real game included, so a counterexample at cap 4 refutes it.
 ///
-/// **Ignored because it fails against the rule as shipped.** It is the
-/// specification for the fix, not a regression guard: un-ignore it when the
-/// rule is corrected or removed. See `DECISIONS.md`.
+/// Fixed 2026-09-17 by dropping the rank-2 shortcut, so this now passes and is
+/// a regression guard. See `DECISIONS.md`.
 #[test]
-#[ignore = "fails until safe autoplay is fixed; this test is the specification"]
 fn safe_autoplay_must_not_refute_a_deal_that_has_a_worry_back_free_win() {
     let restricted = Gypsy::new(MoveOptions::NO_WORRY_BACK);
     for seed in [47318, 66930, 104720, 179898] {
@@ -335,3 +333,5 @@ fn safe_autoplay_must_not_refute_a_deal_that_has_a_worry_back_free_win() {
         );
     }
 }
+
+
