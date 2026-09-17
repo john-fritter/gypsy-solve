@@ -30,6 +30,8 @@ use std::sync::Mutex;
 use std::time::Duration;
 
 use clap::{Args, ValueEnum};
+use gypsy_core::card::RANKS;
+use gypsy_core::state::MIN_TOP_RANK;
 use gypsy_core::{MoveOptions, State};
 use gypsy_solver::{
     replay, solve_restarting, Config, Game, Gypsy, Limit, Report, Table, UnverifiedSolution,
@@ -81,6 +83,12 @@ pub struct BatchArgs {
     /// exercises a dominance only provable with worry-back off.
     #[arg(long, conflicts_with = "both_arms")]
     no_worry_back: bool,
+    /// Highest rank in the Gypsy deck, 4 to 13. Below 13 this deals smaller
+    /// instances of the same game, which the search can exhaust — the only
+    /// way this project gets Gypsy deals proved unsolvable. Ignored for
+    /// Klondike, which is single-deck and not the game under test.
+    #[arg(long, default_value_t = RANKS, value_parser = clap::value_parser!(u8).range(MIN_TOP_RANK as i64..=RANKS as i64))]
+    top_rank: u8,
     /// Solve each deal in both rulesets, carrying each arm's proof to the
     /// other wherever that is sound. Two records per deal.
     ///
@@ -570,9 +578,10 @@ pub fn run(args: BatchArgs) -> Result<(), Box<dyn std::error::Error>> {
         BatchGame::Gypsy => {
             let restricted = Gypsy::new(MoveOptions::NO_WORRY_BACK);
             let full = Gypsy::new(MoveOptions::ALL);
+            let top_rank = args.top_rank;
             drive(
                 arms_of(&args, &restricted, &full),
-                State::deal,
+                move |seed| State::deal_capped(seed, top_rank),
                 "gypsy",
                 &todo,
                 config,
@@ -609,6 +618,7 @@ pub fn run(args: BatchArgs) -> Result<(), Box<dyn std::error::Error>> {
 fn record_of<A: Display>(
     game_name: &str,
     seed: u64,
+    top_rank: Option<u8>,
     ruleset: &str,
     answer: &Answer<A>,
     config: Config,
@@ -627,13 +637,17 @@ fn record_of<A: Display>(
     };
     format!(
         concat!(
-            r#"{{"game":"{}","seed":{},"ruleset":"{}","verdict":"{}","verdict_from":"{}","#,
+            r#"{{"game":"{}","seed":{}{},"ruleset":"{}","verdict":"{}","verdict_from":"{}","#,
             r#""limit":"{}","nodes":{},"line_length":{},"elapsed_ms":{},"node_budget":{},"#,
             r#""max_depth":{},"table_capacity":{},"table_filled":{},"restarts_used":{}{}}}"#,
             "\n"
         ),
         game_name,
         seed,
+        match top_rank {
+            Some(rank) => format!(r#","top_rank":{rank}"#),
+            None => String::new(),
+        },
         ruleset,
         verdict_name(report.verdict),
         answer.from,
@@ -669,6 +683,9 @@ where
     G::Action: Display,
     D: Fn(u64) -> G::Position + Sync,
 {
+    // Klondike is single-deck and has no cap to report, so its records stay
+    // exactly as they were and the recorded runs still diff clean.
+    let cap = (game_name == "gypsy").then_some(args.top_rank);
     let pool = rayon::ThreadPoolBuilder::new()
         .num_threads(args.workers)
         .build()?;
@@ -712,7 +729,7 @@ where
                 .iter()
                 .zip(&answers)
                 .map(|(ruleset, answer)| {
-                    record_of(game_name, seed, ruleset, answer, config, args.lines)
+                    record_of(game_name, seed, cap, ruleset, answer, config, args.lines)
                 })
                 .collect();
 
@@ -930,7 +947,7 @@ mod tests {
     fn a_carried_verdict_says_so_in_its_record() {
         let answer: Answer<gypsy_core::Move> =
             Answer::carried(Verdict::Solvable, None, "no-worry-back");
-        let text = record_of("gypsy", 21, "full", &answer, cheap(), false);
+        let text = record_of("gypsy", 21, Some(RANKS), "full", &answer, cheap(), false);
         assert!(text.contains(r#""ruleset":"full""#), "{text}");
         assert!(text.contains(r#""verdict_from":"no-worry-back""#), "{text}");
         assert!(text.contains(r#""nodes":0"#), "{text}");
@@ -945,6 +962,7 @@ mod tests {
         let text = record_of(
             "gypsy",
             21,
+            Some(RANKS),
             "no-worry-back",
             &Answer::searched(report),
             cheap(),

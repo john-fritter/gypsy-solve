@@ -2467,3 +2467,115 @@ published figure.
 the gate is where it was and only the distance to it moved. Nor does it touch
 the Gypsy side: that arm still proves nothing unsolvable, and no amount of
 Klondike validation substitutes for a Gypsy deal set with refutations in it.
+
+---
+
+## 2026-09-17 — Reduced deals give Gypsy its first refutations, and the first one it found was ours
+
+**Status:** firm. `--top-rank N` ships. The soundness finding below is firm and
+**the fix is not in this entry** — it needs its own change and a re-measurement
+of every Gypsy number.
+
+Every Gypsy verdict this project has ever produced is `solvable` or `unknown`.
+That is not a gap in coverage, it is a blind spot with a shape: a dominance that
+discards winning lines turns a winnable deal into `unsolvable`, and with no deal
+ever proved unsolvable there was nothing for that error to show up on. Klondike
+supplies refutations and is single-deck, so it never exercises duplicate cards,
+group moves as a unit, or the deal-to-every-column stock — the three things
+every two-deck proof here had to extend past. The Gypsy rules were being checked
+only in the direction they cannot fail.
+
+**What shipped.** `--top-rank N` deals from a deck of ranks `A..=N`. Nothing else
+moves: two decks, four suits, eight columns, eight foundation slots,
+alternating-colour building, any sequence moving as a unit, worry-back, and a
+stock still dealing one card to every column, because `8N - 24` divides by 8 at
+every cap. `--top-rank 13` reproduces the frozen deck card for card and a test
+pins that. It is a parameter on the deal, not a variant ruleset, which is what
+lets a verdict on it say anything about the game.
+
+**Why a rank cap and not fewer columns**, which is the reduction that would bite
+harder: `COLUMNS` is an array size threaded through the position, and making it
+dynamic is a real change to the hot path. The cap costs one field and one
+comparison in `is_won`. Cheap first, and measure before paying more.
+
+**Cap 4, 200,000 deals, both arms, 5M budget.** Every deal resolved — no
+unknowns at any cap tried. **23 deals are genuinely unsolvable**, one in about
+8,700, and the two arms agree on all 23. Refutation records are in
+`docs/results/gypsy-cap4-200000deals-refutations.jsonl`.
+
+**The cap cannot be walked up.** At cap 5 and above the refutations disappear:
+more ranks make the game *more* winnable, because the tableau stays eight
+columns wide while the deck grows. Cap 4 is the only cap with teeth, and it has
+runs of at most four cards and a single stock deal, so it exercises the
+split-run rule weakly. The set is real and it is narrow.
+
+### The finding: safe autoplay is unsound for two-deck Gypsy
+
+The set was run against the shipped solver and **four of its 27 restricted-arm
+refutations are false**: seeds 47318, 66930, 104720 and 179898. Each is proved
+`unsolvable` by the restricted arm and is winnable.
+
+Seed 104720 is the clean one. It has a **39-move win containing no worry-back
+move at all**, so the restricted arm must find it; the full arm does. With
+`never_wanted_in_the_tableau` forcing, the restricted arm instead exhausts the
+game in 27 nodes and returns `unsolvable`. Remove the rule and the same search
+returns the same 39-move win. All four behave this way, and the other 23
+refutations stand with every forcing rule removed.
+
+**Where it goes wrong.** At move 4 of that line, nine moves are rules-legal and
+the rule offers one: it forces a two to the foundation, on the argument that
+nothing ever needs a two in the tableau, since the only card that stacks on a
+two is an ace and an ace never needs a base. That argument mentions no rank cap,
+so a counterexample at cap 4 refutes it **as an argument**, which is what
+licensed the rule at thirteen ranks too. Which clause fails, and whether the
+same hole is reachable in the full game, is the next piece of work and is not
+guessed at here.
+
+**What is and is not implicated.** The full arm's forcing rule
+(`safe_with_worry_back`) and the split-run rule produced **no** false refutation
+on these 200,000 deals: the full arm's 23 are exactly the 23 genuine ones. That
+is evidence for those two, not a proof. Klondike implements its own safe
+autoplay rather than sharing this one, so its numbers are not implicated by
+this and are not cleared by it either.
+
+**What it costs the published path, and it is less than it sounds.** At thirteen
+ranks the restricted arm proves nothing unsolvable, so this rule has never
+turned a recorded Gypsy verdict into a false `unsolvable`. What it does instead
+is throw away wins, which shows up as `unknown` — so every Gypsy solvable count
+in this repo is a lower bound that is lower than it should be, and the deals the
+arm has been failing to crack are a place to look. Nothing published is wrong,
+because nothing is published.
+
+**An earlier reading of this run was wrong and is withdrawn.** Before the
+false refutations were identified, the two arms disagreeing on seeds 66930 and
+104720 looked like the project's first *proved* worry-back delta — the
+restricted arm refuting a deal the full arm wins. It is not. Both were the
+unsound rule, and with it removed both arms agree on every deal in the set.
+**The measured worry-back delta at cap 4 is zero.**
+
+### What the set is worth, measured rather than asserted
+
+Calibrated by breaking the rule on purpose and re-running 20,000 cap-4 deals:
+
+| Mutation | verdicts changed |
+|---|---:|
+| force every playable card up | 6 of 20,000 |
+| require opposite-colour foundations one rank lower | **0** of 20,000 |
+| the rule as shipped, against the truth | 4 of 200,000 |
+
+So it catches a gross unsoundness and missed a one-rank error entirely — and it
+caught the real bug, which is the one that mattered. **It is a smoke test, not
+the validation the project needs.** A rule can be wrong in a way cap 4 cannot
+see, and the reason is slack: a cap-4 deal has so much room that discarding some
+winning lines usually leaves others.
+
+**The next axis is fewer columns**, and it now has a measurement behind it
+rather than a hunch: space pressure is what creates unwinnable deals, and the
+cap adds none. That is the change to `COLUMNS` that was deferred above, and
+whether it is worth its cost is a decision for when the current rule is settled.
+
+**Also owed, and cheap:** the same break-it-on-purpose sweep at caps 5 to 7,
+where deals still resolve and the tableau is tighter per rank. It was started
+here and abandoned for wall clock on a shared box; it belongs on fritter.lol.
+Refutations are not required for that test — a false `unsolvable` on a solvable
+deal is detectable at any cap where the search resolves.

@@ -8,6 +8,8 @@ use std::process::ExitCode;
 mod batch;
 
 use clap::{Args, Parser, Subcommand};
+use gypsy_core::card::RANKS;
+use gypsy_core::state::MIN_TOP_RANK;
 use gypsy_core::{parse_move_list, Move, MoveOptions, State};
 use gypsy_solver::{solve_restarting, Config, Gypsy, Limit, Report, Verdict};
 use klondike::{Klondike, Position};
@@ -40,6 +42,11 @@ struct DealArgs {
     /// Deal number. The same seed always gives the same deal.
     #[arg(long)]
     seed: u64,
+    /// Highest rank in the deck, 4 to 13. Below 13 this deals a smaller
+    /// instance of the same game — same rules, fewer ranks — which the search
+    /// can exhaust. It is how Gypsy gets deals it can prove unsolvable.
+    #[arg(long, default_value_t = RANKS, value_parser = clap::value_parser!(u8).range(MIN_TOP_RANK as i64..=RANKS as i64))]
+    top_rank: u8,
 }
 
 #[derive(Args)]
@@ -55,6 +62,11 @@ struct MovesArgs {
     /// Leave out foundation-to-tableau moves.
     #[arg(long)]
     no_worry_back: bool,
+    /// Highest rank in the deck, 4 to 13. Below 13 this deals a smaller
+    /// instance of the same game — same rules, fewer ranks — which the search
+    /// can exhaust. It is how Gypsy gets deals it can prove unsolvable.
+    #[arg(long, default_value_t = RANKS, value_parser = clap::value_parser!(u8).range(MIN_TOP_RANK as i64..=RANKS as i64))]
+    top_rank: u8,
 }
 
 #[derive(Args)]
@@ -70,6 +82,11 @@ struct ReplayArgs {
     /// Print the position after every move, not just at the end.
     #[arg(long)]
     step: bool,
+    /// Highest rank in the deck, 4 to 13. Below 13 this deals a smaller
+    /// instance of the same game — same rules, fewer ranks — which the search
+    /// can exhaust. It is how Gypsy gets deals it can prove unsolvable.
+    #[arg(long, default_value_t = RANKS, value_parser = clap::value_parser!(u8).range(MIN_TOP_RANK as i64..=RANKS as i64))]
+    top_rank: u8,
 }
 
 #[derive(Args)]
@@ -100,6 +117,11 @@ struct SolveArgs {
     /// One JSON object instead of a human-readable report.
     #[arg(long)]
     json: bool,
+    /// Highest rank in the deck, 4 to 13. Below 13 this deals a smaller
+    /// instance of the same game — same rules, fewer ranks — which the search
+    /// can exhaust. It is how Gypsy gets deals it can prove unsolvable.
+    #[arg(long, default_value_t = RANKS, value_parser = clap::value_parser!(u8).range(MIN_TOP_RANK as i64..=RANKS as i64))]
+    top_rank: u8,
 }
 
 #[derive(Args)]
@@ -151,11 +173,11 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
     match cli.command {
         Command::Deal(args) => {
             writeln!(out, "seed {}", args.seed)?;
-            write!(out, "{}", State::deal(args.seed))?;
+            write!(out, "{}", State::deal_capped(args.seed, args.top_rank))?;
         }
         Command::Moves(args) => {
             let moves = read_moves(args.moves.as_deref(), args.moves_file.as_deref())?;
-            let mut state = State::deal(args.seed);
+            let mut state = State::deal_capped(args.seed, args.top_rank);
             apply_all(&mut state, &moves, false, &mut out)?;
 
             let options = if args.no_worry_back {
@@ -171,7 +193,7 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
         }
         Command::Replay(args) => {
             let moves = read_moves(args.moves.as_deref(), args.moves_file.as_deref())?;
-            let mut state = State::deal(args.seed);
+            let mut state = State::deal_capped(args.seed, args.top_rank);
             writeln!(out, "seed {}", args.seed)?;
             if args.step {
                 writeln!(out, "\n-- start")?;
@@ -251,7 +273,7 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
                 MoveOptions::ALL
             });
 
-            let state = State::deal(args.seed);
+            let state = State::deal_capped(args.seed, args.top_rank);
             let report = solve_restarting(&game, &state, config, args.restarts)?;
 
             if let (Some(path), Some(line)) = (&args.trace, &report.line) {
@@ -352,11 +374,12 @@ fn json_report(seed: u64, args: &SolveArgs, report: &Report<Move>) -> String {
     let line = line_json(report.line.as_deref());
     format!(
         concat!(
-            r#"{{"game":"gypsy","seed":{},"ruleset":"{}","verdict":"{}","limit":"{}","nodes":{},"#,
+            r#"{{"game":"gypsy","seed":{},"top_rank":{},"ruleset":"{}","verdict":"{}","limit":"{}","nodes":{},"#,
             r#""line_length":{},"elapsed_ms":{},"node_budget":{},"max_depth":{},"#,
             r#""table_capacity":{},"table_filled":{},"restarts_used":{},"line":{}}}"#
         ),
         seed,
+        args.top_rank,
         ruleset_name(args.no_worry_back),
         verdict_name(report.verdict),
         limit_name(report.limit),

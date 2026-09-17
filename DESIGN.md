@@ -458,10 +458,16 @@ rather than re-deriving:
   wandering. Amended 2026-09-16, when the split-run rule cut every Klondike
   line it touched, one from 1,351 moves to 231.
 - The test that has teeth is the deals proved **unsolvable**, because that is
-  the direction a discarded winning line fails in. A set that proves none —
-  as the Gypsy no-worry-back set does — cannot catch the error at all, which
-  is what went wrong the first time. `klondike --no-worry-back` proves 9 to 10
-  of 50 at 3M; the full arm proves 9 of 50.
+  the direction a discarded winning line fails in. A set that proves none
+  cannot catch the error at all, which is what went wrong the first time.
+  `klondike --no-worry-back` proves 9 to 10 of 50 at 3M; the full arm proves 9
+  of 50. **Gypsy proved none at all until 2026-09-17**, when `--top-rank 4`
+  gave it refutations of its own — the only ones that exercise duplicate cards,
+  group moves as a unit and the deal-to-every-column stock. Run a new Gypsy
+  dominance against that set as well as against Klondike; it is small and
+  narrow but it is the only check in the failing direction that is actually
+  about this game. It found a false refutation in **safe autoplay** the day it
+  existed, so that rule is under dispute and is the next thing to settle.
 - Re-run the arm you did *not* change and diff it against the recorded run in
   `docs/results/`. Threading an option through `legal_actions` touches every
   caller, and "the other arm is untouched" is worth checking rather than

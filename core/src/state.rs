@@ -23,6 +23,13 @@ pub const STOCK_AT_DEAL: usize = DECK_SIZE - COLUMNS * 3;
 /// Stock deals available, each turning up one card per column.
 pub const STOCK_DEALS: usize = STOCK_AT_DEAL / COLUMNS;
 
+/// The lowest rank cap that still deals the opening position.
+///
+/// The deal needs three rows of [`COLUMNS`], so a cap of *n* must give
+/// `8n >= 24`. At exactly 4 the stock is empty and the game is the tableau it
+/// was dealt; 5 is the smallest cap with a stock in it.
+pub const MIN_TOP_RANK: u8 = 4;
+
 /// The foundation slot indices belonging to a suit.
 pub const fn foundation_slots(suit: Suit) -> [u8; 2] {
     let base = suit.index() * 2;
@@ -121,6 +128,14 @@ pub struct State {
     pub foundations: [u8; FOUNDATIONS],
     /// Undealt stock, next card first.
     pub stock: Vec<Card>,
+    /// Highest rank in the deck this position was dealt from.
+    ///
+    /// [`RANKS`] for the real game. A lower cap deals a smaller deck — the
+    /// same rules over fewer ranks — and is how the solver is given Gypsy
+    /// positions it can exhaust. It is fixed at the deal and no move changes
+    /// it, so it is not part of the position for hashing: two positions that
+    /// differ only in this field cannot arise in one search.
+    pub top_rank: u8,
 }
 
 /// Why a move could not be applied.
@@ -169,10 +184,25 @@ impl State {
     /// twice, and is shuffled with [`SplitMix64`]. Both are frozen: changing
     /// either changes what every seed means.
     pub fn deck(seed: u64) -> Vec<Card> {
-        let mut deck = Vec::with_capacity(DECK_SIZE);
+        State::deck_capped(seed, RANKS)
+    }
+
+    /// The same deck, built from ranks `A..=top_rank` only.
+    ///
+    /// At `top_rank == RANKS` this is [`State::deck`] card for card, so the
+    /// frozen order is the full deck's order with the high ranks struck out
+    /// rather than a second ordering to keep track of.
+    pub fn deck_capped(seed: u64, top_rank: u8) -> Vec<Card> {
+        assert!(
+            (MIN_TOP_RANK..=RANKS).contains(&top_rank),
+            "top rank out of range"
+        );
+        let mut deck = Vec::with_capacity(2 * top_rank as usize * SUITS as usize);
         for _ in 0..2 {
-            for index in 0..RANKS * SUITS {
-                deck.push(Card::from_index(index));
+            for suit in 0..SUITS {
+                for rank in 1..=top_rank {
+                    deck.push(Card::new(Suit::from_index(suit), rank));
+                }
             }
         }
         SplitMix64::new(seed).shuffle(&mut deck);
@@ -182,7 +212,20 @@ impl State {
     /// Deals the opening position for a seed: one face-down row, then two
     /// face-up rows, then the rest to the stock.
     pub fn deal(seed: u64) -> State {
-        let deck = State::deck(seed);
+        State::deal_capped(seed, RANKS)
+    }
+
+    /// The same deal from a deck of ranks `A..=top_rank`.
+    ///
+    /// Everything the rules do is unchanged: two decks, four suits, eight
+    /// columns, eight foundation slots, alternating-colour building, any
+    /// sequence moving as a unit, and a stock still dealing one card to every
+    /// column — `8 * top_rank - 24` cards divide by [`COLUMNS`] exactly, so
+    /// the stock never deals a short row. Only the ranks above the cap are
+    /// gone. That makes it a smaller instance of this game rather than a
+    /// different game, which is what lets a verdict on it say anything.
+    pub fn deal_capped(seed: u64, top_rank: u8) -> State {
+        let deck = State::deck_capped(seed, top_rank);
         let mut columns: [Column; COLUMNS] = Default::default();
         let mut dealt = deck.iter().copied();
 
@@ -199,6 +242,7 @@ impl State {
             columns,
             foundations: [0; FOUNDATIONS],
             stock: dealt.collect(),
+            top_rank,
         }
     }
 
@@ -214,7 +258,7 @@ impl State {
 
     /// True when every card has been played up.
     pub fn is_won(&self) -> bool {
-        self.foundations.iter().all(|&rank| rank == RANKS)
+        self.foundations.iter().all(|&rank| rank == self.top_rank)
     }
 
     /// The card on top of a foundation slot, if any.
@@ -446,6 +490,7 @@ mod tests {
             columns,
             foundations,
             stock: Vec::new(),
+            top_rank: RANKS,
         }
     }
 
@@ -537,6 +582,53 @@ mod tests {
             counts[card.index() as usize] += 1;
         }
         assert!(counts.iter().all(|&count| count == 2));
+    }
+
+    /// The cap is a restriction of the frozen deck, not a second ordering.
+    /// If this fails, every published seed has changed meaning.
+    #[test]
+    fn capping_at_thirteen_is_the_frozen_deck() {
+        for seed in [0, 1, 99, 2026] {
+            assert_eq!(State::deck_capped(seed, RANKS), State::deck(seed));
+            assert_eq!(State::deal_capped(seed, RANKS), State::deal(seed));
+        }
+    }
+
+    #[test]
+    fn a_capped_deck_holds_two_of_every_card_at_or_below_the_cap() {
+        for top_rank in MIN_TOP_RANK..=RANKS {
+            let deck = State::deck_capped(7, top_rank);
+            assert_eq!(deck.len(), 2 * top_rank as usize * SUITS as usize);
+            let mut counts = [0u8; (RANKS * SUITS) as usize];
+            for card in deck {
+                assert!(card.rank() <= top_rank, "cap {top_rank} let a card through");
+                counts[card.index() as usize] += 1;
+            }
+            assert!(Suit::ALL.iter().all(|&suit| (1..=top_rank)
+                .all(|rank| counts[Card::new(suit, rank).index() as usize] == 2)));
+        }
+    }
+
+    /// The stock still deals one card to every column with nothing left over,
+    /// which is what keeps a capped deal the same game rather than a variant
+    /// with a ragged last row.
+    #[test]
+    fn a_capped_stock_deals_whole_rows() {
+        for top_rank in MIN_TOP_RANK..=RANKS {
+            let state = State::deal_capped(3, top_rank);
+            assert_eq!(state.stock.len() % COLUMNS, 0);
+            assert_eq!(state.stock.len(), 8 * top_rank as usize - COLUMNS * 3);
+            assert_eq!(state.deals_remaining(), top_rank as usize - 3);
+        }
+    }
+
+    #[test]
+    fn a_capped_game_is_won_at_its_own_top_rank() {
+        let mut state = State::deal_capped(3, 5);
+        state.foundations = [5; FOUNDATIONS];
+        assert!(state.is_won());
+        state.foundations = [RANKS; FOUNDATIONS];
+        assert!(!state.is_won(), "a capped game cannot reach rank 13");
     }
 
     #[test]
