@@ -2380,3 +2380,90 @@ lower. That is the slot deduplication of 2026-09-09, not a cut, so the
 construction relabels the two slots through the rest of the line and carries
 on — sound precisely because two slots showing the same rank hold identical
 piles. It fired 7 times in the run and is counted separately from the rewrites.
+
+---
+
+## 2026-09-17 — The thousand-deal validation: the gate is four times closer than the fifty-deal set said
+
+**Status:** firm (a measurement). Run by Gizmo on fritter.lol at commit
+`51a6bf0`; report at
+`docs/reports/klondike-1000deal-validation-20260917T013457Z.md`, results at
+`docs/results/klondike-full-12M-1000deals-restart{1,8}.jsonl`.
+
+Every winnability number this project had was measured on fifty deals. The gate
+that opens Gypsy batch work is defined on a thousand. This is that run: seeds
+0–999, full Klondike, 12M nodes a deal, 1,024 MiB of table a worker, at both
+restart policies and otherwise identical.
+
+**Seeds 0–49 reproduced the recorded run exactly** — every verdict and every
+node count — so what follows is a property of the sample, not of the box or the
+build.
+
+| Policy | solvable | unsolvable | unknown | bracket (95%) |
+|---|---:|---:|---:|---|
+| `--restarts 1` | 777 | 142 | **81 (8.1%)** | 75.0% – 87.8% |
+| `--restarts 8` | 761 | 113 | 126 (12.6%) | 73.4% – 90.5% |
+
+Both contain the published 81.945%. Every unknown in both runs stopped on the
+node budget; no other limit fired.
+
+**The finding is that seeds 0–49 are twice as hard as a thousand deals are.**
+That set returns 16% unknown at this budget; the thousand returns **8.1%**. The
+fifty were never chosen to be representative — they were the first fifty seeds,
+kept because they were the first fifty seeds — and the project has been reading
+its distance to the gate off them for a week.
+
+**What that does to the distance.** *Do not run a Gypsy batch yet* in
+`DESIGN.md` put the 5% gate at 400x the 48M budget, 1.9x10^10 nodes a deal, and
+called it out of reach behind a memory wall. On the same measured slope of 0.817
+per fourfold step, 8.1% reaches 5% in **2.4 fourfold steps from 12M — about
+3.3x10^8 nodes a deal**. That is fifty times nearer, and it is nearer because
+the starting height was mismeasured, not because the search improved.
+
+**It is one point, and the slope under it is still the fifty-deal slope.** The
+curve was fitted on the hard sample and nothing says it transfers; an easier
+sample can perfectly well fall away at a different rate. The extrapolation above
+is worth acting on and not worth quoting. What settles it is the same sweep at
+this sample size, which the timings below make affordable.
+
+**Cost, which is the other surprise.** The restarts-1 run took **14m 44s of wall
+clock** on four workers, 1.05 hours of aggregate per-deal time. A thousand deals
+is an afternoon, not the multi-day commitment the sizing assumed, and the 88
+CPU-days quoted for the gate was computed off both the wrong height and the
+50-deal set. Re-sweeping 3M / 12M / 48M over a thousand deals is hours.
+
+**The memory wall stands as stated but binds later than it looked.** Table
+occupancy peaked at 12.0M entries of 67.1M — **18% of a 1,024 MiB table** — so
+nothing in this run was evicting, and the budget at which the table stops being
+a measurement of budget is above 12M rather than at it.
+
+### Also settled: restarts cost Klondike refutations, and now the comparison is clean
+
+*Randomised restarts* (2026-09-16) concluded that restarts gain Klondike nothing
+and lose it refutations. **The conclusion is confirmed and one line of its
+evidence was confounded.**
+
+The confound: that entry's 12M line compares `klondike-full-12M-50deals-restart8`
+against the one-run figure of 32/10/8, and those two runs used **different table
+sizes** — 256 MiB for the restart run against 1,024 MiB for the one-run. Two
+variables moved. The entry's 3M evidence was table-matched and is unaffected,
+and it already carried the finding on its own: 10 refutations at one run, 8 at
+k=4, 8 at k=16, every file at 256 MiB.
+
+This run is table-matched at 1,024 MiB, at a thousand deals, and settles it far
+past what the fifty could: **restarts cost 29 refutations and 55 resolved deals**
+— 142 unsolvable down to 113, 8.1% unknown up to 12.6%. Exhausting a game needs
+contiguous budget and slicing cannot give it. The per-game policy stands:
+restarts on for Gypsy, off for Klondike.
+
+**And the caveat that policy carried is now discharged.** *Randomised restarts*
+owed a thousand-deal run under both policies, on the grounds that validating a
+configuration other than the one that publishes is the thing the Klondike arm
+exists to prevent. Both numbers are above. The validated configuration is
+whichever of them the Gypsy run matches, and both are consistent with the
+published figure.
+
+**What this does not change.** 8.1% is not below 5%, so **no Gypsy batch yet**;
+the gate is where it was and only the distance to it moved. Nor does it touch
+the Gypsy side: that arm still proves nothing unsolvable, and no amount of
+Klondike validation substitutes for a Gypsy deal set with refutations in it.

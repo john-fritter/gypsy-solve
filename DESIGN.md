@@ -471,30 +471,36 @@ rather than re-deriving:
 
 ### Do not run a Gypsy batch yet
 
-The Klondike unknown bucket stands at **18% on 50 deals at a 3M budget**, and
-**12% at 48M** (2026-09-16, split-run dominance). The run of it: 40% at 3M on
-2026-09-13, 34% once the table probed, 22% at 3M's *sixteenfold* budget of 48M —
-and now 18% at 3M again, 12% at 48M. While it is anywhere near this large the
-validation bracket spans tens of points, which is consistent with a correct
-search and cannot distinguish one from a search that misses wins systematically.
-It is 40.6 points wide at 3M and 34.6 at 48M, against 65.8 before.
+**Measured on a thousand deals, 2026-09-17.** Seeds 0-999, full Klondike, 12M a
+deal: **8.1% unknown** at `--restarts 1` (777 solvable, 142 unsolvable), a
+bracket of 75.0% to 87.8% containing the published figure. At `--restarts 8`,
+12.6% unknown and 29 fewer refutations, which confirms the per-game restart
+policy at a sample size the fifty-deal set could not.
 
-**Budget will not close it; a dominance just did more than 16x the budget.**
-Re-swept on the current search at 3M, 12M and 48M (2026-09-16): 18%, 16%, 12%
-unknown, a factor of **0.817 per fourfold step** against the 0.804 measured
-before either dominance existed. The slope has now survived two large
-improvements unchanged — the curve moves down, not round. What the dominance
-bought is height, and it is worth two orders of magnitude: the 5% gate is 400x
-the 48M budget away, 1.9x10^10 nodes per deal, where the old curve put it at
-4x10^4 times and 2x10^12.
+**The fifty-deal set is twice as hard as the population.** It returns 16%
+unknown at this budget where a thousand deals return 8.1%, and seeds 0-49
+reproduced their recorded run exactly inside this one, so that is the sample and
+not the build. Every reading of the distance to the gate before this date was
+taken off those fifty and was correspondingly pessimistic.
 
-**Still out of reach, and the binding constraint is now memory rather than
-time.** 88 CPU-days would buy a thousand deals at that budget; a table sized to
-it at this sweep's own protocol is 1.7 TB per worker. At any affordable table
-the level stops being a measurement of budget and becomes one of eviction, so
-the extrapolation fails its own conditions before the gate: nothing on this
-curve is measurable much past 10^9 nodes per deal. The route is dominances, for
-the third time and now for a third reason.
+**What that does to the distance.** On the measured slope of **0.817 per
+fourfold step** — 18%, 16%, 12% at 3M, 12M, 48M on the fifty — 8.1% reaches 5%
+in about 2.4 fourfold steps from 12M, **roughly 3.3x10^8 nodes a deal**. The
+previous estimate here was 400x the 48M budget, 1.9x10^10, and it was wrong
+about the height rather than the slope. Treat this as worth acting on and not
+worth quoting: the slope is still the fifty-deal slope, fitted on the hard
+sample, and an easier sample may fall away at a different rate.
+
+**Time is no longer the constraint and memory binds later than it looked.** The
+thousand-deal run took **14m 44s of wall clock** on four workers. Table
+occupancy peaked at 18% of a 1,024 MiB table, so nothing was evicting at 12M.
+Re-sweeping 3M / 12M / 48M at a thousand deals is hours and is what turns the
+extrapolation above into a measurement; the 88 CPU-days quoted before was
+computed off the wrong height.
+
+**What has not changed.** 8.1% is not 5%, so the gate holds and no Gypsy batch
+runs yet. And the Gypsy arm still proves **nothing** unsolvable, which no amount
+of Klondike validation substitutes for.
 
 Two thresholds, and they are different:
 
