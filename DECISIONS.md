@@ -2692,3 +2692,81 @@ one-rank one. It also caught a real, shipped, subtle bug that a week of Klondike
 validation and 200,000 Klondike deals did not. A test set that finds one true
 defect has earned more than the calibration table gave it. The narrowness stands
 and so does the next axis: fewer columns.
+
+---
+
+## 2026-09-17 — Node counts are a property of the table size; verdicts are not
+
+**Status:** firm (a measurement). It corrects a stop condition this session
+wrote into a Gizmo prompt, and the run that tripped it is
+`docs/reports/klondike-budget-sweep-stop-20260917T204252Z.md`.
+
+The budget sweep was gated on a 12M control reproducing the recorded
+thousand-deal run. The control returned **identical verdicts on all 1,000
+seeds** — 777 solvable, 142 unsolvable, 81 unknown — and node counts differing
+on **9 seeds, by 13 nodes in 1.38 billion**. Gizmo stopped and did not start the
+3M or 48M points, declining to write the differences off as noise.
+
+**That was the right instinct and the wrong stop condition, and the stop
+condition was ours.** The prompt asked for verdict identity and then asserted
+that node counts "should match too: neither table size evicts, so the search is
+the same search." The second half is false, and the run is what showed it.
+
+**Why the table's own occupancy figure does not mean what the prompt assumed.**
+`Table::insert` probes eight slots forward from the home slot and, if all eight
+belong to other keys, **displaces the last of them**. That is not eviction on a
+full table — it is an eight-way collision inside one window, and its frequency
+depends on the load factor, which depends on capacity. So two tables holding the
+same 12M positions at 18% and 9% occupancy displace at different rates. A
+displaced entry costs one re-expansion, which is one extra node. It can never
+cost a verdict, which is the property `table.rs` was built around.
+
+**Measured, on seed 182 — one of the nine — at 12M:**
+
+| Table | Nodes | Over the floor |
+|---|---:|---:|
+| 256 MiB | 11,590,962 | +7,370 |
+| 512 MiB | 11,583,722 | +130 |
+| 1,024 MiB | 11,583,595 | +3 |
+| 2,048 MiB | 11,583,592 | — |
+| 4,096 MiB | 11,583,592 | — |
+
+It **plateaus at 2,048 MiB and stays there at twice that**: that is the size at
+which this deal stops displacing, and the numbers below it are re-expansions.
+`unsolvable` at every size.
+
+**So the control was not a failed reproduction, it was a better run.** The nine
+differences all point the same way — the larger table is lower — and the
+recorded 1,024 MiB reference is the file carrying 13 spurious nodes, not the
+control.
+
+Both of Gizmo's figures reproduce here exactly and deterministically, twice each
+at each size. Worth noting what that also re-confirms: this was run on the
+branch that **removed safe autoplay's shortcut for twos**, and it reproduces a
+Klondike full-arm number measured before that change to the node. The full arm
+never touches that rule.
+
+### The consequence, which is larger than this run
+
+**Node counts are only comparable between runs at the same table size.**
+Verdicts are comparable across table sizes; nothing else in a results file is.
+Every dominance in this project was accepted or rejected partly on a node-count
+delta, and *Randomised restarts* (2026-09-16) already had one comparison that
+crossed table sizes without anyone noticing — 256 MiB against 1,024 MiB — which
+the thousand-deal run later settled by other means. That was caught as an
+inconsistency; this entry is the mechanism behind it.
+
+The rule from here: **a before-and-after that quotes nodes must hold the table
+fixed, and say which size.** A comparison that cannot is a verdict comparison
+only.
+
+**The corrected stop condition**, now in `docs/prompts/`: verdicts must match
+seed for seed, and a node-count difference is expected rather than
+disqualifying — small, and downward as the table grows. A node count *higher* on
+the larger table, or any verdict difference at all, is still a stop.
+
+**What this does not excuse.** The 12M control stands and the sweep can go on
+from it; 3M and 48M were correctly not run under the condition as written. At
+48M against a 2,048 MiB table the occupancy is about 36% rather than 9%, so that
+point will displace more than this one did. It stays verdict-safe, and the
+per-budget occupancy figure is worth reporting for exactly that reason.

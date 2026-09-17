@@ -9,14 +9,27 @@ at the real sample size.
 It is affordable because the first run was: fourteen minutes of wall clock for a
 thousand deals at 12M, where the plan had assumed days.
 
+**Revised 2026-09-17, after the first attempt stopped at its own gate.** The
+original asked for node-count identity between table sizes, which the table
+cannot give — see *Node counts are a property of the table size* in
+`DECISIONS.md`. Gizmo was right to stop on a condition stated that way. The 12M
+control it produced is kept as the middle point, and this version asks only for
+the two remaining budgets.
+
 The request as sent follows.
 
 ---
 
 **Sweep the node budget over a thousand Klondike deals for `gypsy-solve`.**
 
-Build `main` and run `gypsy batch --game klondike` over **seeds 0–999** three
-times, at **3M, 12M and 48M** nodes per deal. Everything else identical.
+Build `main` and run `gypsy batch --game klondike` over **seeds 0–999** at
+**3M and 48M** nodes per deal, at the parameters below.
+
+**The 12M point is already done and is not to be re-run.** A previous attempt at
+this sweep produced it as a control and then stopped, on a condition about node
+counts that was wrong and has been corrected below. That control passed the
+check that matters — identical verdicts on all 1,000 seeds — so keep the file it
+produced and treat 12M as the middle point of the curve.
 
 The output is a curve: the unknown fraction at each budget, and the factor it
 falls by per fourfold step. That factor is what says how far the 5% gate is, and
@@ -45,9 +58,20 @@ refuses rather than starting a run that will not.
 **Seeds 0–999, and the 12M point is a check on the other two.** That run already
 exists — `docs/results/klondike-full-12M-1000deals-restart1.jsonl` — and the
 full Klondike arm has not changed since, so the 12M point must come back with
-**the same verdict on every seed**. Node counts should match too: neither table
-size evicts, so the search is the same search. **If any verdict differs, stop
-and report** rather than running the rest.
+**the same verdict on every seed**. **If any verdict differs, stop and report**
+rather than running the rest.
+
+**Node counts will not match, and that is not a stop.** The transposition table
+probes eight slots and displaces the last of them when all eight are taken, so
+how often it forgets a position depends on the load factor and therefore on the
+table size. A forgotten position costs one re-expansion — one node — and can
+never cost a verdict. Changing the table from 1,024 to 2,048 MiB moved nine of a
+thousand seeds by a total of thirteen nodes in 1.38 billion, all of them
+downward. Expect that, in that direction and that order of magnitude.
+
+What **is** still a stop: any verdict difference at all, or node counts coming
+back *higher* on the larger table, which would mean something other than
+displacement is moving.
 
 One thing has changed in the repo since that file: a dominance called safe
 autoplay was corrected, which made the search slightly weaker. It fires **only
