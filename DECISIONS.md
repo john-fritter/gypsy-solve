@@ -2859,3 +2859,79 @@ the report.
 suppressed and this sweep is the full arm; the arm was verified identical to the
 node across the change. The sweep was run on `main` at `51a6bf0`, before the fix
 landed on a branch, and nothing about it needs redoing.
+
+---
+
+## 2026-09-18 — The 5% gate is cleared, and Gypsy batch work can start
+
+**Status:** firm (a measurement). Run by Gizmo at commit `51a6bf0`; report at
+`docs/reports/klondike-64M-gate-20260918T045833Z.md`, results at
+`docs/results/klondike-full-64M-1000deals-restart1.jsonl`.
+
+One thousand Klondike deals, full arm, restarts off, 64M nodes, 2,048 MiB:
+**792 solvable, 162 unsolvable, 46 unknown — 4.6%.** Every unknown stopped on
+the budget. The bracket is 76.6% to 86.0% and contains the published 81.945%.
+
+**The gate wanted fifty unknown deals or fewer and got forty-six.** The
+condition `DESIGN.md` set on 2026-09-14 — below about 5% unknown on a thousand
+Klondike deals before Gypsy batch work starts — is met.
+
+**The fit predicted 4.69% and the run returned 4.60%**, a miss of nine
+hundredths of a point over a 1.33x extrapolation. The curve recorded yesterday
+is behaving.
+
+**Two checks that had to pass, and did.** The 64M unknown set is a strict subset
+of the 48M set — five deals resolved and none unresolved, which is the only
+shape more budget can produce. And the seed list came out of the results file at
+46 of 46, where the 48M report's transcribed list was one short.
+
+Peak occupancy 47.5%, the closest any run has come to half full. 1h46m of wall
+clock on two workers.
+
+### What this opens, and what it does not
+
+**Validation is now a real check rather than a formality.** The bracket is 9.4
+points wide against 40.6 two days ago. A search that missed wins systematically
+would have to do so inside a nine-point window while still resolving 95% of a
+thousand deals.
+
+**It does not make a Gypsy figure publishable.** That wants the 1% threshold,
+which the curve puts at 8.3x10^9 nodes a deal and 124 GiB of table per worker —
+out of reach on this box, and reachable through dominances rather than budget.
+The gate opens *batch work*, which is the survey that finds out where Gypsy
+actually stands.
+
+### The prerequisite nobody should skip
+
+**The Gypsy batch must not run on `51a6bf0`.** That commit carries safe
+autoplay's shortcut for twos, which is unsound (see *Drop safe autoplay's
+shortcut for twos*, 2026-09-17). It fires in the **restricted** arm — the arm
+that produces essentially every Gypsy verdict, since the full arm's results are
+carried from it — and it throws winning lines away. At thirteen ranks that never
+shows up as a false `unsolvable`, because that arm proves nothing unsolvable; it
+shows up as `unknown`, so it makes the solvable count **too low**. A headline
+Gypsy survey run on that code would understate the answer by an unknown margin.
+
+The fix is on `claude/status-review-next-steps-h3qm1j` and is not merged. That
+merge is the gate on the gate.
+
+**Also still owed:** the Gypsy 12M restart-8 re-measure of that fix. It was
+measured at 3M over 50 deals — nothing changed, nodes +1.0% — and abandoned at
+12M for wall clock on a shared box. 12M with restarts resolves far more deals
+than 3M, so it has more room to differ, and it is the cheap thing to run before
+committing to a thousand.
+
+### Sizing the Gypsy run, and one thing about it that is not obvious
+
+`solve_restarting` calls `solve` once per slice, and `solve` allocates its own
+table. **So a restart run's table is sized by the slice, not by the total
+budget.** At the 1.5M slices both tuned configurations use, a 256 MiB table sits
+at about 9% occupancy whatever the total — 12M as 8 slices or 48M as 32. Gypsy
+runs need no large table and gain nothing from one, which is the opposite of the
+Klondike sweep, where the table was the binding constraint.
+
+That leaves memory cheap enough for four workers at roughly 2.6 GiB total. On
+the recorded fifty-deal throughput — 168 to 191 knodes a second — a thousand
+deals costs about 7.4 aggregate hours at 12M restart-8 and 15.4 at 48M
+restart-32, both arms. Under a day on four workers, unless the population is
+harder than seeds 0-49, which is precisely what the run exists to find out.

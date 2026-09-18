@@ -475,7 +475,7 @@ rather than re-deriving:
 - Keep both result files in `docs/results/` as `<game>-<arm>-<budget>-<n>deals
   -{baseline,<rule>}.jsonl`, and append the decision entry with the table.
 
-### The Gypsy batch is one deal away
+### The Gypsy batch: the gate is cleared
 
 **Measured on a thousand deals at three budgets, 2026-09-18.** Full Klondike,
 restarts off, seeds 0-999, one fixed 2,048 MiB table throughout:
@@ -496,10 +496,24 @@ population, and it was wrong about the shape as well as the height. The
 fifty-deal set has now misled this project twice on the same question, both
 times in the same direction.
 
-**5.1% is fifty-one unknown deals where the gate wants fifty.** The fit puts 5%
-at about 5.2x10^7 nodes a deal, barely outside the measured range: a 64M or 96M
-run settles it, and the 48M run took 1h26m on two workers. This is the last
-thing standing between here and Gypsy batch work.
+**Cleared at 64M on 2026-09-18: 46 unknown of 1,000, 4.6%**, against a gate of
+fifty deals. 792 solvable, 162 unsolvable, bracket 76.6% to 86.0% containing the
+published figure, and the 64M unknown set a strict subset of the 48M one. The
+fit predicted 4.69%. 1h46m on two workers.
+
+| Budget | unknown |
+|---:|---:|
+| 3M | 12.3% |
+| 12M | 8.1% |
+| 48M | 5.1% |
+| **64M** | **4.6%** |
+
+**Gypsy batch work can start** — but not on `51a6bf0`. Safe autoplay's shortcut
+for twos is unsound and fires in the restricted arm, the arm every Gypsy verdict
+comes from, and it discards winning lines. At thirteen ranks that surfaces as
+`unknown` rather than as a false refutation, so it makes the solvable count too
+low. The fix must be merged first, and its 12M restart-8 re-measure run, before
+any survey worth keeping.
 
 **Time is no longer the constraint anywhere. The table is.** A run stops
 measuring budget and starts measuring displacement as the positions a deal
