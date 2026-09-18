@@ -46,14 +46,20 @@ impl Default for Klondike {
 /// one, which checks four piles because two decks give each suit two of them.
 /// Neither is correct for the other game.
 ///
-/// Aces and twos are always safe. Nothing stacks on an ace; and the only card
-/// that stacks on a two is an ace, which never needs a base, because an ace
-/// off the foundations means its suit's foundation is empty — one deck, one
-/// ace per suit — and so will take it at any time.
+/// **Aces qualify by the arithmetic and need no special case**: nothing stacks
+/// on an ace, which is what `wanted = 0` says.
+///
+/// Twos used to be waved through alongside them, on the argument that the only
+/// card that stacks on a two is an ace, and an ace never needs a base because
+/// its suit's foundation is empty and will take it at any time. That proves
+/// the ace is never stuck; it does not prove the ace has no *use* for the two,
+/// and a move that is never forced still has to be available. Gypsy's rank-4
+/// deal set refutes the same shortcut by explicit counterexample, and the
+/// argument here is the one-deck wording of the argument it refutes — so the
+/// shortcut is gone from both games. Klondike has no counterexample of its
+/// own; it has no reason to keep a step that failed next door. See
+/// `DECISIONS.md`.
 fn never_wanted_in_the_tableau(position: &Position, card: Card) -> bool {
-    if card.rank() <= 2 {
-        return true;
-    }
     let wanted = card.rank() - 1;
     Suit::ALL
         .iter()
@@ -295,22 +301,35 @@ mod tests {
         Card::new(suit, rank)
     }
 
-    /// Nothing stacks on an ace, and only an ace stacks on a two.
+    /// Nothing stacks on an ace, so an ace is safe with the foundations empty.
+    /// A two is not: an ace stacks on it, and until both black aces are up one
+    /// may still want it. The shortcut that waved twos through alongside aces
+    /// was dropped on 2026-09-17 — see `never_wanted_in_the_tableau`.
     #[test]
-    fn aces_and_twos_never_need_a_base() {
-        let position = Position::deal(3);
+    fn an_ace_needs_no_base_but_a_two_needs_the_black_aces_up() {
+        let mut position = Position::deal(3);
+        let two = card(Suit::Hearts, 2);
+
         assert!(never_wanted_in_the_tableau(
             &position,
             card(Suit::Hearts, 1)
         ));
-        assert!(never_wanted_in_the_tableau(
-            &position,
-            card(Suit::Hearts, 2)
-        ));
+        assert!(
+            !never_wanted_in_the_tableau(&position, two),
+            "a black ace can still want this two"
+        );
         assert!(!never_wanted_in_the_tableau(
             &position,
             card(Suit::Hearts, 3)
         ));
+
+        position.foundations[Suit::Spades.index() as usize] = 1;
+        assert!(
+            !never_wanted_in_the_tableau(&position, two),
+            "the club ace is still down"
+        );
+        position.foundations[Suit::Clubs.index() as usize] = 1;
+        assert!(never_wanted_in_the_tableau(&position, two));
     }
 
     /// The single-deck rule checks both opposite-colour piles, and the Gypsy

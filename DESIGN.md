@@ -458,10 +458,16 @@ rather than re-deriving:
   wandering. Amended 2026-09-16, when the split-run rule cut every Klondike
   line it touched, one from 1,351 moves to 231.
 - The test that has teeth is the deals proved **unsolvable**, because that is
-  the direction a discarded winning line fails in. A set that proves none —
-  as the Gypsy no-worry-back set does — cannot catch the error at all, which
-  is what went wrong the first time. `klondike --no-worry-back` proves 9 to 10
-  of 50 at 3M; the full arm proves 9 of 50.
+  the direction a discarded winning line fails in. A set that proves none
+  cannot catch the error at all, which is what went wrong the first time.
+  `klondike --no-worry-back` proves 9 to 10 of 50 at 3M; the full arm proves 9
+  of 50. **Gypsy proved none at all until 2026-09-17**, when `--top-rank 4`
+  gave it refutations of its own — the only ones that exercise duplicate cards,
+  group moves as a unit and the deal-to-every-column stock. Run a new Gypsy
+  dominance against that set as well as against Klondike; it is small and
+  narrow but it is the only check in the failing direction that is actually
+  about this game. It found a false refutation in **safe autoplay** the day it
+  existed, so that rule is under dispute and is the next thing to settle.
 - Re-run the arm you did *not* change and diff it against the recorded run in
   `docs/results/`. Threading an option through `legal_actions` touches every
   caller, and "the other arm is untouched" is worth checking rather than
@@ -469,32 +475,58 @@ rather than re-deriving:
 - Keep both result files in `docs/results/` as `<game>-<arm>-<budget>-<n>deals
   -{baseline,<rule>}.jsonl`, and append the decision entry with the table.
 
-### Do not run a Gypsy batch yet
+### The Gypsy batch: the gate is cleared
 
-The Klondike unknown bucket stands at **18% on 50 deals at a 3M budget**, and
-**12% at 48M** (2026-09-16, split-run dominance). The run of it: 40% at 3M on
-2026-09-13, 34% once the table probed, 22% at 3M's *sixteenfold* budget of 48M —
-and now 18% at 3M again, 12% at 48M. While it is anywhere near this large the
-validation bracket spans tens of points, which is consistent with a correct
-search and cannot distinguish one from a search that misses wins systematically.
-It is 40.6 points wide at 3M and 34.6 at 48M, against 65.8 before.
+**Measured on a thousand deals at three budgets, 2026-09-18.** Full Klondike,
+restarts off, seeds 0-999, one fixed 2,048 MiB table throughout:
 
-**Budget will not close it; a dominance just did more than 16x the budget.**
-Re-swept on the current search at 3M, 12M and 48M (2026-09-16): 18%, 16%, 12%
-unknown, a factor of **0.817 per fourfold step** against the 0.804 measured
-before either dominance existed. The slope has now survived two large
-improvements unchanged — the curve moves down, not round. What the dominance
-bought is height, and it is worth two orders of magnitude: the 5% gate is 400x
-the 48M budget away, 1.9x10^10 nodes per deal, where the old curve put it at
-4x10^4 times and 2x10^12.
+| Budget | solvable | unsolvable | unknown | bracket (95%) |
+|---:|---:|---:|---:|---|
+| 3M | 755 | 122 | **12.3%** | 72.7% - 89.7% |
+| 12M | 777 | 142 | **8.1%** | 75.0% - 87.8% |
+| 48M | 791 | 158 | **5.1%** | 76.5% - 86.3% |
 
-**Still out of reach, and the binding constraint is now memory rather than
-time.** 88 CPU-days would buy a thousand deals at that budget; a table sized to
-it at this sweep's own protocol is 1.7 TB per worker. At any affordable table
-the level stops being a measurement of budget and becomes one of eviction, so
-the extrapolation fails its own conditions before the gate: nothing on this
-curve is measurable much past 10^9 nodes per deal. The route is dominances, for
-the third time and now for a third reason.
+All three contain the published 81.945%, every unknown stopped on the node
+budget, and the 48M unknowns are a proper subset of the 12M ones.
+
+**The slope is 0.644 per fourfold step.** This file carried 0.817 from
+2026-09-16 to 2026-09-18 and quoted it as the reason budget was not the route.
+That number came off the fifty-deal set, which is twice as hard as the
+population, and it was wrong about the shape as well as the height. The
+fifty-deal set has now misled this project twice on the same question, both
+times in the same direction.
+
+**Cleared at 64M on 2026-09-18: 46 unknown of 1,000, 4.6%**, against a gate of
+fifty deals. 792 solvable, 162 unsolvable, bracket 76.6% to 86.0% containing the
+published figure, and the 64M unknown set a strict subset of the 48M one. The
+fit predicted 4.69%. 1h46m on two workers.
+
+| Budget | unknown |
+|---:|---:|
+| 3M | 12.3% |
+| 12M | 8.1% |
+| 48M | 5.1% |
+| **64M** | **4.6%** |
+
+**Gypsy batch work can start** — but not on `51a6bf0`. Safe autoplay's shortcut
+for twos is unsound and fires in the restricted arm, the arm every Gypsy verdict
+comes from, and it discards winning lines. At thirteen ranks that surfaces as
+`unknown` rather than as a false refutation, so it makes the solvable count too
+low. The fix must be merged first, and its 12M restart-8 re-measure run, before
+any survey worth keeping.
+
+**Time is no longer the constraint anywhere. The table is.** A run stops
+measuring budget and starts measuring displacement as the positions a deal
+expands approach the table's capacity, and the 48M point is already at 36% of a
+2,048 MiB table. Reaching 5% wants 0.8 GiB a worker, 3.7% wants the 2 GiB the
+box has, and **1% wants 124 GiB** — so fritter.lol tops out around 3.7% unknown.
+The 1% figure is also 170 times past the largest point measured and is a
+projection rather than a measurement.
+
+**So the route to a publishable Gypsy figure is still dominances**, for the same
+reason as before and with a smaller number attached: 124 GiB a worker rather
+than the 1.7 TB this file used to quote, and a gate that is open rather than out
+of sight.
 
 Two thresholds, and they are different:
 

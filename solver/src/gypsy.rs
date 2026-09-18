@@ -174,15 +174,33 @@ impl Gypsy {
 /// *r-1* before nothing can want this card. The single-deck rule checks two
 /// piles and would be wrong here.
 ///
-/// Aces and twos are always safe. Nothing stacks on an ace, so no ace ever
-/// needs a base; and the only card that stacks on a two is an ace, which never
-/// needs one either — an ace off the foundations implies a free slot of its
-/// suit, since both slots of a suit can only be occupied by that suit's two
-/// aces.
+/// With worry-back off a card on a foundation never comes down, so once every
+/// opposite-colour pile is at *r-1* or better, every card that could have sat
+/// here is gone for good.
+///
+/// **Aces qualify by the arithmetic and need no special case**: nothing stacks
+/// on an ace, which is exactly what `wanted = 0` says. Twos get no such pass,
+/// and an earlier version of this rule gave them one — see below.
+///
+/// # Twos are not automatically safe
+///
+/// This rule used to open `if card.rank() <= 2 { return true; }`, on the
+/// argument that the only card that stacks on a two is an ace, and an ace
+/// never *needs* a base because a foundation slot of its suit is always free
+/// to take it.
+///
+/// That argument proves the ace is never stuck. It does not prove the ace has
+/// no use for the two, and those are different claims: a move that is never
+/// forced still has to be available. Playing an ace onto a two is a legal
+/// build, and sometimes it is the move that wins — it leaves the foundation
+/// alone, which matters when advancing it is what loses.
+///
+/// Three positions from the rank-4 deal set refute the shortcut outright, each
+/// one a two forced up where every other move wins: seeds 47318, 66930 and
+/// 179898, and 104720 by a longer route. In every one of them the corrected
+/// condition below rejects the two, because the opposite-colour aces are still
+/// in play. See `DECISIONS.md`.
 fn never_wanted_in_the_tableau(state: &State, card: Card) -> bool {
-    if card.rank() <= 2 {
-        return true;
-    }
     let wanted = card.rank() - 1;
     Suit::ALL
         .iter()
@@ -667,23 +685,41 @@ mod tests {
     use gypsy_core::state::{COLUMNS, FOUNDATIONS};
     use gypsy_core::Move;
 
-    /// Nothing stacks on an ace, and only an ace stacks on a two.
+    /// Nothing stacks on an ace, so an ace is safe with the foundations empty.
+    /// A two is not: an ace stacks on it, and until every opposite-colour ace
+    /// is up one may still want it. The shortcut that waved twos through
+    /// alongside aces was refuted on 2026-09-17 — see
+    /// `never_wanted_in_the_tableau`.
     #[test]
-    fn aces_and_twos_never_need_a_base() {
+    fn an_ace_needs_no_base_but_a_two_needs_the_black_aces_up() {
         let mut state = State::deal(3);
         state.foundations = [0; FOUNDATIONS];
+        let two = Card::new(Suit::Hearts, 2);
+
         assert!(never_wanted_in_the_tableau(
             &state,
             Card::new(Suit::Hearts, 1)
         ));
-        assert!(never_wanted_in_the_tableau(
-            &state,
-            Card::new(Suit::Hearts, 2)
-        ));
+        assert!(
+            !never_wanted_in_the_tableau(&state, two),
+            "a black ace can still want this two"
+        );
         assert!(!never_wanted_in_the_tableau(
             &state,
             Card::new(Suit::Hearts, 3)
         ));
+
+        // Both slots of both black suits at the ace: no black ace is left.
+        for suit in [Suit::Spades, Suit::Clubs] {
+            for slot in foundation_slots(suit) {
+                state.foundations[slot as usize] = 1;
+            }
+        }
+        assert!(never_wanted_in_the_tableau(&state, two));
+
+        // One black ace still down is enough to keep the two wanted.
+        state.foundations[foundation_slots(Suit::Clubs)[1] as usize] = 0;
+        assert!(!never_wanted_in_the_tableau(&state, two));
     }
 
     /// The two-deck correction, and the one a ported single-deck rule gets
@@ -1161,7 +1197,7 @@ mod tests {
 
         for options in [MoveOptions::NO_WORRY_BACK, MoveOptions::ALL] {
             let game = Gypsy::new(options);
-            for seed in 0..6 {
+            for seed in 0..20 {
                 for state in descend(&game, seed, 4_000) {
                     let Some(forced) = game.forced_action(&state) else {
                         continue;
@@ -1206,7 +1242,7 @@ mod tests {
 
         for options in [MoveOptions::NO_WORRY_BACK, MoveOptions::ALL] {
             let game = Gypsy::new(options);
-            for seed in 0..6 {
+            for seed in 0..20 {
                 for state in descend(&game, seed, 2_000) {
                     let mut forced_then_filtered = game.legal_actions(&state, 0);
 

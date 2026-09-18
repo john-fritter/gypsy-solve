@@ -37,6 +37,7 @@ gypsy klondike --seed 0 --deals 100 --json
 gypsy klondike --seed 0 --deals 50 --no-worry-back
 gypsy batch  --game klondike --deals 1000 --workers 3 --out results.jsonl
 gypsy batch  --game gypsy --deals 50 --both-arms --out both.jsonl
+gypsy batch  --game gypsy --top-rank 4 --deals 20000 --both-arms --out small.jsonl
 ```
 
 `--moves-file -` reads from stdin. In a move file, `#` starts a comment.
@@ -77,6 +78,12 @@ checks come back down, and then it proves nothing. Gypsy checks four
 opposite-colour foundation piles because two decks give each suit two; Klondike
 checks two, and additionally excludes the waste, because playing a card off it
 re-aligns every later draw-three.
+
+An ace qualifies with the foundations empty, because nothing stacks on an ace. A
+two does not: until every opposite-colour ace is up, one may still want to sit on
+it. Both games waved twos through until 2026-09-17, when the rank-4 deal set
+produced deals the restricted arm wrongly proved unsolvable — see
+`DECISIONS.md`.
 
 **Safe foundation plays with worry-back legal**, in both games. A card whose
 opposite-colour foundations are within a rank, whose same-colour twin suit is
@@ -232,6 +239,46 @@ F1>T4      worry back: foundation slot 1's top card onto column 4
 
 Foundation slots run 0-7, two per suit: 0-1 spades, 2-3 hearts, 4-5 clubs,
 6-7 diamonds. The two slots of a suit are interchangeable.
+
+## Reduced deals
+
+`--top-rank N` deals from a deck of ranks `A..=N` instead of `A..=K`. It is on
+`deal`, `moves`, `replay`, `solve` and `batch`, and defaults to 13, which is the
+game.
+
+Everything else is untouched: two decks, four suits, eight columns, eight
+foundation slots, alternating-colour building, any sequence moving as a unit,
+worry-back, and a stock still dealing one card to every column — `8N - 24`
+divides by 8 for every cap, so the stock never deals a short row. A capped deal
+is a smaller instance of this game, not a variant of it, and `--top-rank 13`
+reproduces the frozen deck card for card.
+
+**It exists because the Gypsy arm proves nothing unsolvable.** Every Gypsy
+verdict the project has is `solvable` or `unknown`, and a win replayed from the
+deal cannot catch the error a bad dominance makes: discarding the only winning
+line turns a solvable deal into `unsolvable`, and with no deal proved unsolvable
+there is nothing to notice it on. Klondike supplies refutations but is
+single-deck, so it never exercises duplicate cards, group moves as a unit, or
+the deal-to-every-column stock — the three things every two-deck proof here had
+to extend past.
+
+At `--top-rank 4` the search exhausts every deal. Over 200,000 deals, 23 are
+genuinely unsolvable — one in about 8,700, the same 23 in both arms. Those are
+the only positions that test a Gypsy dominance in the direction it fails.
+
+**The first thing they found was a bug in a shipped dominance.** Safe autoplay
+proved four of those 200,000 deals `unsolvable` when they are winnable, because
+it waved every two straight to the foundation. Fixed the same day, in both
+games; the four now come back solvable and the 23 genuine refutations stand. See
+`DECISIONS.md`.
+
+`--top-rank 5` and above resolve too, but the refutations disappear: more ranks
+make the game *more* winnable, not less, because the tableau stays eight columns
+wide while the deck grows. So the cap cannot be walked up toward the real game
+and keep its teeth, and cap 4 has runs of at most four cards and a single stock
+deal, which exercises the split-run rule weakly. Broken on purpose, the set
+catches a rule that forces everything (6 verdicts in 20,000) and misses a
+one-rank error entirely (0 in 20,000). It is a smoke test, not validation.
 
 ## Seeds
 

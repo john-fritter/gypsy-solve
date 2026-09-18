@@ -2380,3 +2380,558 @@ lower. That is the slot deduplication of 2026-09-09, not a cut, so the
 construction relabels the two slots through the rest of the line and carries
 on — sound precisely because two slots showing the same rank hold identical
 piles. It fired 7 times in the run and is counted separately from the rewrites.
+
+---
+
+## 2026-09-17 — The thousand-deal validation: the gate is four times closer than the fifty-deal set said
+
+**Status:** firm (a measurement). Run by Gizmo on fritter.lol at commit
+`51a6bf0`; report at
+`docs/reports/klondike-1000deal-validation-20260917T013457Z.md`, results at
+`docs/results/klondike-full-12M-1000deals-restart{1,8}.jsonl`.
+
+Every winnability number this project had was measured on fifty deals. The gate
+that opens Gypsy batch work is defined on a thousand. This is that run: seeds
+0–999, full Klondike, 12M nodes a deal, 1,024 MiB of table a worker, at both
+restart policies and otherwise identical.
+
+**Seeds 0–49 reproduced the recorded run exactly** — every verdict and every
+node count — so what follows is a property of the sample, not of the box or the
+build.
+
+| Policy | solvable | unsolvable | unknown | bracket (95%) |
+|---|---:|---:|---:|---|
+| `--restarts 1` | 777 | 142 | **81 (8.1%)** | 75.0% – 87.8% |
+| `--restarts 8` | 761 | 113 | 126 (12.6%) | 73.4% – 90.5% |
+
+Both contain the published 81.945%. Every unknown in both runs stopped on the
+node budget; no other limit fired.
+
+**The finding is that seeds 0–49 are twice as hard as a thousand deals are.**
+That set returns 16% unknown at this budget; the thousand returns **8.1%**. The
+fifty were never chosen to be representative — they were the first fifty seeds,
+kept because they were the first fifty seeds — and the project has been reading
+its distance to the gate off them for a week.
+
+**What that does to the distance.** *Do not run a Gypsy batch yet* in
+`DESIGN.md` put the 5% gate at 400x the 48M budget, 1.9x10^10 nodes a deal, and
+called it out of reach behind a memory wall. On the same measured slope of 0.817
+per fourfold step, 8.1% reaches 5% in **2.4 fourfold steps from 12M — about
+3.3x10^8 nodes a deal**. That is fifty times nearer, and it is nearer because
+the starting height was mismeasured, not because the search improved.
+
+**It is one point, and the slope under it is still the fifty-deal slope.** The
+curve was fitted on the hard sample and nothing says it transfers; an easier
+sample can perfectly well fall away at a different rate. The extrapolation above
+is worth acting on and not worth quoting. What settles it is the same sweep at
+this sample size, which the timings below make affordable.
+
+**Cost, which is the other surprise.** The restarts-1 run took **14m 44s of wall
+clock** on four workers, 1.05 hours of aggregate per-deal time. A thousand deals
+is an afternoon, not the multi-day commitment the sizing assumed, and the 88
+CPU-days quoted for the gate was computed off both the wrong height and the
+50-deal set. Re-sweeping 3M / 12M / 48M over a thousand deals is hours.
+
+**The memory wall stands as stated but binds later than it looked.** Table
+occupancy peaked at 12.0M entries of 67.1M — **18% of a 1,024 MiB table** — so
+nothing in this run was evicting, and the budget at which the table stops being
+a measurement of budget is above 12M rather than at it.
+
+### Also settled: restarts cost Klondike refutations, and now the comparison is clean
+
+*Randomised restarts* (2026-09-16) concluded that restarts gain Klondike nothing
+and lose it refutations. **The conclusion is confirmed and one line of its
+evidence was confounded.**
+
+The confound: that entry's 12M line compares `klondike-full-12M-50deals-restart8`
+against the one-run figure of 32/10/8, and those two runs used **different table
+sizes** — 256 MiB for the restart run against 1,024 MiB for the one-run. Two
+variables moved. The entry's 3M evidence was table-matched and is unaffected,
+and it already carried the finding on its own: 10 refutations at one run, 8 at
+k=4, 8 at k=16, every file at 256 MiB.
+
+This run is table-matched at 1,024 MiB, at a thousand deals, and settles it far
+past what the fifty could: **restarts cost 29 refutations and 55 resolved deals**
+— 142 unsolvable down to 113, 8.1% unknown up to 12.6%. Exhausting a game needs
+contiguous budget and slicing cannot give it. The per-game policy stands:
+restarts on for Gypsy, off for Klondike.
+
+**And the caveat that policy carried is now discharged.** *Randomised restarts*
+owed a thousand-deal run under both policies, on the grounds that validating a
+configuration other than the one that publishes is the thing the Klondike arm
+exists to prevent. Both numbers are above. The validated configuration is
+whichever of them the Gypsy run matches, and both are consistent with the
+published figure.
+
+**What this does not change.** 8.1% is not below 5%, so **no Gypsy batch yet**;
+the gate is where it was and only the distance to it moved. Nor does it touch
+the Gypsy side: that arm still proves nothing unsolvable, and no amount of
+Klondike validation substitutes for a Gypsy deal set with refutations in it.
+
+---
+
+## 2026-09-17 — Reduced deals give Gypsy its first refutations, and the first one it found was ours
+
+**Status:** firm. `--top-rank N` ships. The soundness finding below is firm and
+**the fix is not in this entry** — it needs its own change and a re-measurement
+of every Gypsy number.
+
+Every Gypsy verdict this project has ever produced is `solvable` or `unknown`.
+That is not a gap in coverage, it is a blind spot with a shape: a dominance that
+discards winning lines turns a winnable deal into `unsolvable`, and with no deal
+ever proved unsolvable there was nothing for that error to show up on. Klondike
+supplies refutations and is single-deck, so it never exercises duplicate cards,
+group moves as a unit, or the deal-to-every-column stock — the three things
+every two-deck proof here had to extend past. The Gypsy rules were being checked
+only in the direction they cannot fail.
+
+**What shipped.** `--top-rank N` deals from a deck of ranks `A..=N`. Nothing else
+moves: two decks, four suits, eight columns, eight foundation slots,
+alternating-colour building, any sequence moving as a unit, worry-back, and a
+stock still dealing one card to every column, because `8N - 24` divides by 8 at
+every cap. `--top-rank 13` reproduces the frozen deck card for card and a test
+pins that. It is a parameter on the deal, not a variant ruleset, which is what
+lets a verdict on it say anything about the game.
+
+**Why a rank cap and not fewer columns**, which is the reduction that would bite
+harder: `COLUMNS` is an array size threaded through the position, and making it
+dynamic is a real change to the hot path. The cap costs one field and one
+comparison in `is_won`. Cheap first, and measure before paying more.
+
+**Cap 4, 200,000 deals, both arms, 5M budget.** Every deal resolved — no
+unknowns at any cap tried. **23 deals are genuinely unsolvable**, one in about
+8,700, and the two arms agree on all 23. Refutation records are in
+`docs/results/gypsy-cap4-200000deals-refutations.jsonl`.
+
+**The cap cannot be walked up.** At cap 5 and above the refutations disappear:
+more ranks make the game *more* winnable, because the tableau stays eight
+columns wide while the deck grows. Cap 4 is the only cap with teeth, and it has
+runs of at most four cards and a single stock deal, so it exercises the
+split-run rule weakly. The set is real and it is narrow.
+
+### The finding: safe autoplay is unsound for two-deck Gypsy
+
+The set was run against the shipped solver and **four of its 27 restricted-arm
+refutations are false**: seeds 47318, 66930, 104720 and 179898. Each is proved
+`unsolvable` by the restricted arm and is winnable.
+
+Seed 104720 is the clean one. It has a **39-move win containing no worry-back
+move at all**, so the restricted arm must find it; the full arm does. With
+`never_wanted_in_the_tableau` forcing, the restricted arm instead exhausts the
+game in 27 nodes and returns `unsolvable`. Remove the rule and the same search
+returns the same 39-move win. All four behave this way, and the other 23
+refutations stand with every forcing rule removed.
+
+**Where it goes wrong.** At move 4 of that line, nine moves are rules-legal and
+the rule offers one: it forces a two to the foundation, on the argument that
+nothing ever needs a two in the tableau, since the only card that stacks on a
+two is an ace and an ace never needs a base. That argument mentions no rank cap,
+so a counterexample at cap 4 refutes it **as an argument**, which is what
+licensed the rule at thirteen ranks too. Which clause fails, and whether the
+same hole is reachable in the full game, is the next piece of work and is not
+guessed at here.
+
+**What is and is not implicated.** The full arm's forcing rule
+(`safe_with_worry_back`) and the split-run rule produced **no** false refutation
+on these 200,000 deals: the full arm's 23 are exactly the 23 genuine ones. That
+is evidence for those two, not a proof. Klondike implements its own safe
+autoplay rather than sharing this one, so its numbers are not implicated by
+this and are not cleared by it either.
+
+**What it costs the published path, and it is less than it sounds.** At thirteen
+ranks the restricted arm proves nothing unsolvable, so this rule has never
+turned a recorded Gypsy verdict into a false `unsolvable`. What it does instead
+is throw away wins, which shows up as `unknown` — so every Gypsy solvable count
+in this repo is a lower bound that is lower than it should be, and the deals the
+arm has been failing to crack are a place to look. Nothing published is wrong,
+because nothing is published.
+
+**An earlier reading of this run was wrong and is withdrawn.** Before the
+false refutations were identified, the two arms disagreeing on seeds 66930 and
+104720 looked like the project's first *proved* worry-back delta — the
+restricted arm refuting a deal the full arm wins. It is not. Both were the
+unsound rule, and with it removed both arms agree on every deal in the set.
+**The measured worry-back delta at cap 4 is zero.**
+
+### What the set is worth, measured rather than asserted
+
+Calibrated by breaking the rule on purpose and re-running 20,000 cap-4 deals:
+
+| Mutation | verdicts changed |
+|---|---:|
+| force every playable card up | 6 of 20,000 |
+| require opposite-colour foundations one rank lower | **0** of 20,000 |
+| the rule as shipped, against the truth | 4 of 200,000 |
+
+So it catches a gross unsoundness and missed a one-rank error entirely — and it
+caught the real bug, which is the one that mattered. **It is a smoke test, not
+the validation the project needs.** A rule can be wrong in a way cap 4 cannot
+see, and the reason is slack: a cap-4 deal has so much room that discarding some
+winning lines usually leaves others.
+
+**The next axis is fewer columns**, and it now has a measurement behind it
+rather than a hunch: space pressure is what creates unwinnable deals, and the
+cap adds none. That is the change to `COLUMNS` that was deferred above, and
+whether it is worth its cost is a decision for when the current rule is settled.
+
+**Also owed, and cheap:** the same break-it-on-purpose sweep at caps 5 to 7,
+where deals still resolve and the tableau is tighter per rank. It was started
+here and abandoned for wall clock on a shared box; it belongs on fritter.lol.
+Refutations are not required for that test — a false `unsolvable` on a solvable
+deal is detectable at any cap where the search resolves.
+
+---
+
+## 2026-09-17 — Safe autoplay loses its shortcut for twos, in both games
+
+**Status:** firm. Fixes the unsoundness found in *Reduced deals give Gypsy its
+first refutations* (earlier today) and supersedes the diagnosis in it.
+
+The rule opened:
+
+```rust
+if card.rank() <= 2 { return true; }
+```
+
+on the argument that nothing stacks on an ace, and the only card that stacks on
+a two is an ace, which never *needs* a base because a foundation slot of its
+suit is always free to take it.
+
+**The argument proves the ace is never stuck. It does not prove the ace has no
+use for the two, and those are different claims.** Playing an ace onto a two is
+a legal build, and it is sometimes the move that wins — it leaves the foundation
+alone, and advancing the foundation is what loses. A move that is never *forced*
+still has to be *available*. The shortcut treated "has somewhere else to go" as
+"is not wanted here", and that step does not hold.
+
+**The fix is to delete the shortcut and let the general condition run.** Aces
+still qualify with the foundations empty, by the arithmetic rather than by a
+special case: `wanted = rank - 1` is 0 for an ace, and every pile is at 0 or
+better, which is exactly the statement that nothing stacks on an ace. A two now
+requires every opposite-colour pile to have reached the ace — for Gypsy all four
+of them, since two decks give each suit two slots. That is the same argument the
+rest of the rule rests on, applied at the bottom of the deck where it had been
+skipped.
+
+**The correction in the earlier entry's diagnosis.** That entry said the
+divergence was "at move 4, where nine moves are rules-legal and the rule offers
+one". That was where the recorded *line* stopped being offered, which is not the
+same thing — a forcing rule may reject a line whenever some other winning line
+survives, and at that position every one of the nine moves still won. The real
+failure is three positions later in the walk. **Withdraw that sentence**; the
+counterexamples below are the evidence.
+
+**The counterexamples**, found by walking each deal under a sound search and
+asking at every forced position whether the forced child still wins. In each the
+rule forces a two and every other move wins:
+
+| Deal (cap 4) | forced | position |
+|---|---|---|
+| seed 47318 | 2c | one of nine moves; seven of the other eight win |
+| seed 66930 | 2c | **two 2c are available and only the other one wins** |
+| seed 179898 | 2s | one of seven; five of the other six win |
+
+Seed 66930 is the sharpest: two copies of the same card are playable to the same
+foundation, and the rule takes the first. One wins and one loses, so even
+"playing a safe card is free" fails — with duplicate cards it is not one move
+but a choice of moves, and the choice is not free.
+
+### Re-measured
+
+**Gypsy, rank cap 4, 200,000 deals, both arms.** The four false refutations are
+gone; the 23 genuine ones all stand; no new refutation appeared; the two arms
+now agree exactly. This is the measurement the fix exists for.
+
+| | before | after |
+|---|---:|---:|
+| restricted arm refutations | 27 (4 false) | **23** |
+| full arm refutations | 23 | 23 |
+| arms disagreeing | 4 | **0** |
+
+**Klondike full arm: identical to the node** over 50 deals at 3M. Safe autoplay
+fires only with worry-back suppressed, so the arm carrying the published figure
+never touched this rule — the thousand-deal validation stands unchanged.
+
+**Klondike restricted arm, 50 deals at 3M**: 31 solvable either way, and one
+verdict moves — seed 44 goes `unsolvable` to `unknown`. **Nothing is
+contradicted.** Re-solved at 200M it is unsolvable in 3,087,433 nodes, just over
+the 3M budget: the old verdict was right and the fix only made it unaffordable
+at that budget. Nodes +3.4%.
+
+**Gypsy, 50 deals at 3M, both arms** — the cost on the arm that publishes.
+**Nothing changed and nodes are up 1.0%**, 1.576e8 to 1.592e8: 25 solvable and
+25 unknown in each arm, before and after, deal for deal. The forced twos were,
+in the main, moves the search was going to make first anyway, which is why
+removing a rule that fired constantly costs almost nothing. The 12M restart-8
+configuration is queued for fritter.lol and is the one to watch: it resolves
+far more deals, so it has more room to differ.
+
+### What this does and does not cost
+
+**No recorded Gypsy verdict was ever a false `unsolvable`**, because at thirteen
+ranks the restricted arm has never proved anything unsolvable at all. What the
+rule did instead was throw wins away, which surfaces as `unknown` — so the
+Gypsy solvable counts in this repo were lower bounds a little lower than they
+should have been, and the correction can only move them up.
+
+**Klondike's numbers are unaffected where they are published and barely affected
+where they are not.** The one refutation that slipped past a budget is a
+resolution cost, not an error.
+
+**Klondike had the same shortcut and no counterexample of its own.** It is
+single-deck, so seed 66930's two-copies failure cannot happen there, but the
+first and third counterexamples do not depend on duplicates — they depend on an
+ace being worth playing onto a two. The argument the Klondike version states is
+the one-deck wording of the argument that was refuted next door, so the shortcut
+is gone from both games. Removing a step nobody can defend is cheaper than
+keeping it and hoping.
+
+**What the deal set is worth, revised upward.** *Reduced deals* called cap 4 a
+smoke test, on the evidence that it caught a gross mutation and missed a
+one-rank one. It also caught a real, shipped, subtle bug that a week of Klondike
+validation and 200,000 Klondike deals did not. A test set that finds one true
+defect has earned more than the calibration table gave it. The narrowness stands
+and so does the next axis: fewer columns.
+
+---
+
+## 2026-09-17 — Node counts are a property of the table size; verdicts are not
+
+**Status:** firm (a measurement). It corrects a stop condition this session
+wrote into a Gizmo prompt, and the run that tripped it is
+`docs/reports/klondike-budget-sweep-stop-20260917T204252Z.md`.
+
+The budget sweep was gated on a 12M control reproducing the recorded
+thousand-deal run. The control returned **identical verdicts on all 1,000
+seeds** — 777 solvable, 142 unsolvable, 81 unknown — and node counts differing
+on **9 seeds, by 13 nodes in 1.38 billion**. Gizmo stopped and did not start the
+3M or 48M points, declining to write the differences off as noise.
+
+**That was the right instinct and the wrong stop condition, and the stop
+condition was ours.** The prompt asked for verdict identity and then asserted
+that node counts "should match too: neither table size evicts, so the search is
+the same search." The second half is false, and the run is what showed it.
+
+**Why the table's own occupancy figure does not mean what the prompt assumed.**
+`Table::insert` probes eight slots forward from the home slot and, if all eight
+belong to other keys, **displaces the last of them**. That is not eviction on a
+full table — it is an eight-way collision inside one window, and its frequency
+depends on the load factor, which depends on capacity. So two tables holding the
+same 12M positions at 18% and 9% occupancy displace at different rates. A
+displaced entry costs one re-expansion, which is one extra node. It can never
+cost a verdict, which is the property `table.rs` was built around.
+
+**Measured, on seed 182 — one of the nine — at 12M:**
+
+| Table | Nodes | Over the floor |
+|---|---:|---:|
+| 256 MiB | 11,590,962 | +7,370 |
+| 512 MiB | 11,583,722 | +130 |
+| 1,024 MiB | 11,583,595 | +3 |
+| 2,048 MiB | 11,583,592 | — |
+| 4,096 MiB | 11,583,592 | — |
+
+It **plateaus at 2,048 MiB and stays there at twice that**: that is the size at
+which this deal stops displacing, and the numbers below it are re-expansions.
+`unsolvable` at every size.
+
+**So the control was not a failed reproduction, it was a better run.** The nine
+differences all point the same way — the larger table is lower — and the
+recorded 1,024 MiB reference is the file carrying 13 spurious nodes, not the
+control.
+
+Both of Gizmo's figures reproduce here exactly and deterministically, twice each
+at each size. Worth noting what that also re-confirms: this was run on the
+branch that **removed safe autoplay's shortcut for twos**, and it reproduces a
+Klondike full-arm number measured before that change to the node. The full arm
+never touches that rule.
+
+### The consequence, which is larger than this run
+
+**Node counts are only comparable between runs at the same table size.**
+Verdicts are comparable across table sizes; nothing else in a results file is.
+Every dominance in this project was accepted or rejected partly on a node-count
+delta, and *Randomised restarts* (2026-09-16) already had one comparison that
+crossed table sizes without anyone noticing — 256 MiB against 1,024 MiB — which
+the thousand-deal run later settled by other means. That was caught as an
+inconsistency; this entry is the mechanism behind it.
+
+The rule from here: **a before-and-after that quotes nodes must hold the table
+fixed, and say which size.** A comparison that cannot is a verdict comparison
+only.
+
+**The corrected stop condition**, now in `docs/prompts/`: verdicts must match
+seed for seed, and a node-count difference is expected rather than
+disqualifying — small, and downward as the table grows. A node count *higher* on
+the larger table, or any verdict difference at all, is still a stop.
+
+**What this does not excuse.** The 12M control stands and the sweep can go on
+from it; 3M and 48M were correctly not run under the condition as written. At
+48M against a 2,048 MiB table the occupancy is about 36% rather than 9%, so that
+point will displace more than this one did. It stays verdict-safe, and the
+per-budget occupancy figure is worth reporting for exactly that reason.
+
+---
+
+## 2026-09-18 — The budget curve, measured on a thousand deals: the slope was wrong too
+
+**Status:** firm (a measurement). Run by Gizmo on fritter.lol at commit
+`51a6bf0`; report at
+`docs/reports/klondike-budget-sweep-20260917T234829Z.md`, results at
+`docs/results/klondike-full-{3M,12M,48M}-1000deals-restart1.jsonl`.
+
+Full Klondike, restarts off, seeds 0–999, one fixed 2,048 MiB table at every
+budget. The 12M point is the control from the stopped run, kept rather than
+re-run.
+
+| Budget | solvable | unsolvable | unknown | bracket (95%) |
+|---:|---:|---:|---:|---|
+| 3M | 755 | 122 | **12.3%** | 72.7% – 89.7% |
+| 12M | 777 | 142 | **8.1%** | 75.0% – 87.8% |
+| 48M | 791 | 158 | **5.1%** | 76.5% – 86.3% |
+
+All three contain the published 81.945% and every unknown stopped on the node
+budget. The 48M unknowns are a proper subset of the 12M unknowns, which is the
+consistency a budget sweep has to show.
+
+**The slope is 0.644 per fourfold step, not 0.817.** The fifty-deal set gave
+0.817 and that number has been in `DESIGN.md` since 2026-09-16, surviving two
+large improvements to the search and being quoted as evidence that "the curve
+moves down, not round". It was measured on a sample twice as hard as the
+population, and it was wrong about the shape as well as the height. The measured
+multipliers are 0.659 and 0.630, geometric mean **0.644**.
+
+**So the fifty-deal set has now misled this project twice on the same question**
+— once on where the curve starts, once on how fast it falls. Both errors pointed
+the same way, and together they moved the publishable threshold by three orders
+of magnitude.
+
+### What the corrected curve puts the thresholds at
+
+A log-linear fit through the three points gives `u(B) ≈ e^2.647 × B^-0.3175`.
+
+| Threshold | On the measured curve | On the fifty-deal slope |
+|---|---:|---:|
+| 5% unknown | **5.2x10^7** nodes/deal | 3.3x10^8 |
+| 1% unknown | **8.3x10^9** nodes/deal | 2.0x10^13 |
+
+The 5% figure is barely outside the measured range and is worth acting on. The
+1% figure is 170 times past the largest point measured and is a projection, not
+a measurement — `DESIGN.md` has warned twice that an extrapolation of this curve
+fails its own conditions before it arrives, and that warning still stands.
+
+**The gate is one deal away, not an order of magnitude.** 5.1% is 51 unknown
+deals where the gate wants 50 or fewer. A 64M or 96M run settles it and costs
+about two hours on the box, where the last one took 1h26m.
+
+### Time is no longer the constraint anywhere; memory is, and now it has an address
+
+The 48M run cost **1h26m of wall clock** on two workers. Extrapolating the
+aggregate figures, even the 1% budget is days rather than months of compute. The
+wall is the table.
+
+A run stops measuring budget and starts measuring displacement once the
+positions a deal expands approach the table's capacity. At 2,048 MiB that is
+1.34x10^8 entries, and the 48M point already sits at 36% occupancy. Putting the
+fit and the capacity together:
+
+| Target | nodes/deal | table needed per worker |
+|---|---:|---:|
+| 5% | 5.2x10^7 | 0.8 GiB |
+| **~3.7%** | 1.3x10^8 | **2 GiB — what the box has** |
+| 1% | 8.3x10^9 | **124 GiB** |
+
+**So fritter.lol can reach about 3.7% unknown and no further**, which clears the
+5% gate with room and leaves the 1% publishing threshold needing a machine two
+orders of magnitude larger, or another dominance. That is the same conclusion
+`DESIGN.md` reached — the route is dominances — but the number attached to it is
+now 124 GiB rather than 1.7 TB, and the gate in front of it is open rather than
+out of sight.
+
+**A discrepancy in the report, minor and worth recording.** It states 51
+unresolved seeds at 48M and lists 50; the 12M list was complete at 81 of 81. One
+seed is missing from the transcribed working set rather than from the run, and
+the results file is authoritative. The 48M unknown list is the working set for
+the next round of solver work, so it is worth taking from the file rather than
+the report.
+
+**Not affected by the safe-autoplay fix.** That rule fires only with worry-back
+suppressed and this sweep is the full arm; the arm was verified identical to the
+node across the change. The sweep was run on `main` at `51a6bf0`, before the fix
+landed on a branch, and nothing about it needs redoing.
+
+---
+
+## 2026-09-18 — The 5% gate is cleared, and Gypsy batch work can start
+
+**Status:** firm (a measurement). Run by Gizmo at commit `51a6bf0`; report at
+`docs/reports/klondike-64M-gate-20260918T045833Z.md`, results at
+`docs/results/klondike-full-64M-1000deals-restart1.jsonl`.
+
+One thousand Klondike deals, full arm, restarts off, 64M nodes, 2,048 MiB:
+**792 solvable, 162 unsolvable, 46 unknown — 4.6%.** Every unknown stopped on
+the budget. The bracket is 76.6% to 86.0% and contains the published 81.945%.
+
+**The gate wanted fifty unknown deals or fewer and got forty-six.** The
+condition `DESIGN.md` set on 2026-09-14 — below about 5% unknown on a thousand
+Klondike deals before Gypsy batch work starts — is met.
+
+**The fit predicted 4.69% and the run returned 4.60%**, a miss of nine
+hundredths of a point over a 1.33x extrapolation. The curve recorded yesterday
+is behaving.
+
+**Two checks that had to pass, and did.** The 64M unknown set is a strict subset
+of the 48M set — five deals resolved and none unresolved, which is the only
+shape more budget can produce. And the seed list came out of the results file at
+46 of 46, where the 48M report's transcribed list was one short.
+
+Peak occupancy 47.5%, the closest any run has come to half full. 1h46m of wall
+clock on two workers.
+
+### What this opens, and what it does not
+
+**Validation is now a real check rather than a formality.** The bracket is 9.4
+points wide against 40.6 two days ago. A search that missed wins systematically
+would have to do so inside a nine-point window while still resolving 95% of a
+thousand deals.
+
+**It does not make a Gypsy figure publishable.** That wants the 1% threshold,
+which the curve puts at 8.3x10^9 nodes a deal and 124 GiB of table per worker —
+out of reach on this box, and reachable through dominances rather than budget.
+The gate opens *batch work*, which is the survey that finds out where Gypsy
+actually stands.
+
+### The prerequisite nobody should skip
+
+**The Gypsy batch must not run on `51a6bf0`.** That commit carries safe
+autoplay's shortcut for twos, which is unsound (see *Drop safe autoplay's
+shortcut for twos*, 2026-09-17). It fires in the **restricted** arm — the arm
+that produces essentially every Gypsy verdict, since the full arm's results are
+carried from it — and it throws winning lines away. At thirteen ranks that never
+shows up as a false `unsolvable`, because that arm proves nothing unsolvable; it
+shows up as `unknown`, so it makes the solvable count **too low**. A headline
+Gypsy survey run on that code would understate the answer by an unknown margin.
+
+The fix is on `claude/status-review-next-steps-h3qm1j` and is not merged. That
+merge is the gate on the gate.
+
+**Also still owed:** the Gypsy 12M restart-8 re-measure of that fix. It was
+measured at 3M over 50 deals — nothing changed, nodes +1.0% — and abandoned at
+12M for wall clock on a shared box. 12M with restarts resolves far more deals
+than 3M, so it has more room to differ, and it is the cheap thing to run before
+committing to a thousand.
+
+### Sizing the Gypsy run, and one thing about it that is not obvious
+
+`solve_restarting` calls `solve` once per slice, and `solve` allocates its own
+table. **So a restart run's table is sized by the slice, not by the total
+budget.** At the 1.5M slices both tuned configurations use, a 256 MiB table sits
+at about 9% occupancy whatever the total — 12M as 8 slices or 48M as 32. Gypsy
+runs need no large table and gain nothing from one, which is the opposite of the
+Klondike sweep, where the table was the binding constraint.
+
+That leaves memory cheap enough for four workers at roughly 2.6 GiB total. On
+the recorded fifty-deal throughput — 168 to 191 knodes a second — a thousand
+deals costs about 7.4 aggregate hours at 12M restart-8 and 15.4 at 48M
+restart-32, both arms. Under a day on four workers, unless the population is
+harder than seeds 0-49, which is precisely what the run exists to find out.

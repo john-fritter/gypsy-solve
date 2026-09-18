@@ -6,6 +6,7 @@
 //! which is enough shape for the cases that matter here.
 
 use gypsy_core::card::Suit;
+use gypsy_core::card::RANKS;
 use gypsy_core::state::FOUNDATIONS;
 use gypsy_core::{Card, Move, MoveOptions, State};
 
@@ -21,6 +22,7 @@ fn dealt_row(row: [Card; 8], foundations: [u8; FOUNDATIONS]) -> State {
         columns: Default::default(),
         foundations: [0; FOUNDATIONS],
         stock: row.to_vec(),
+        top_rank: RANKS,
     };
     state.apply(Move::Stock).expect("stock deal is legal");
     state.foundations = foundations;
@@ -90,8 +92,9 @@ fn a_position_one_move_from_home_is_solved_and_the_line_replays() {
 fn an_already_won_position_needs_no_moves() {
     let state = State {
         columns: Default::default(),
-        foundations: [13; FOUNDATIONS],
+        foundations: [RANKS; FOUNDATIONS],
         stock: Vec::new(),
+        top_rank: RANKS,
     };
     let report = solve(&full_rules(), &state, config(10, 10)).expect("solution must verify");
     assert_eq!(report.verdict, Verdict::Solvable);
@@ -256,3 +259,79 @@ fn a_refutation_from_the_first_slice_ends_the_run() {
     assert_eq!(report.verdict, Verdict::Unsolvable);
     assert_eq!(report.restarts_used, 1);
 }
+
+/// The project's first refutation of a real Gypsy deal, and the only test here
+/// that can catch a dominance which discards winning lines.
+///
+/// Every other Gypsy check is a win replayed from the deal, and replaying a win
+/// cannot fail in that direction: a rule that throws away the *only* winning
+/// line turns a solvable deal into `unsolvable`, and until there was a deal
+/// proved unsolvable there was nothing to notice it on. Klondike supplies
+/// refutations but is single-deck, so it never exercises duplicate cards,
+/// group moves as a unit, or the deal-to-every-column stock — the three things
+/// every two-deck proof in this crate had to extend past.
+///
+/// Rank cap 4, seed 1064, exhausted in both arms. If a future dominance makes
+/// this deal `solvable`, either the rule or this verdict is wrong; if it makes
+/// it `unknown`, the search stopped exhausting a game it used to finish.
+#[test]
+fn the_capped_deal_that_cannot_be_won_stays_unwon() {
+    let state = State::deal_capped(1064, 4);
+    for (name, rules) in [
+        ("no-worry-back", Gypsy::new(MoveOptions::NO_WORRY_BACK)),
+        ("full", full_rules()),
+    ] {
+        let report = solve(&rules, &state, config(20_000_000, 10_000))
+            .expect("a refutation has no line to verify");
+        assert_eq!(report.verdict, Verdict::Unsolvable, "{name} arm");
+        assert_eq!(report.limit, None, "{name} arm stopped on a limit");
+    }
+}
+
+/// A cap changes the deck and nothing else, so the search must still reach a
+/// verdict rather than run off the end of a game it does not recognise.
+#[test]
+fn capped_deals_resolve_in_both_arms() {
+    for seed in 0..25 {
+        let state = State::deal_capped(seed, 4);
+        for rules in [Gypsy::new(MoveOptions::NO_WORRY_BACK), full_rules()] {
+            let report = solve(&rules, &state, config(5_000_000, 10_000)).expect("verified");
+            assert_eq!(report.limit, None, "seed {seed} hit a limit");
+            assert_ne!(report.verdict, Verdict::Unknown, "seed {seed}");
+        }
+    }
+}
+
+
+/// The counterexample that shows safe autoplay is unsound for two-deck Gypsy.
+///
+/// Seed 104720 at rank cap 4 has a 39-move win that uses **no worry-back at
+/// all**, so the restricted arm must find it. With `never_wanted_in_the_tableau`
+/// forcing, that arm instead exhausts the game in 27 nodes and reports
+/// `unsolvable`: the rule discards every winning line. The same happens on
+/// seeds 47318, 66930 and 179898, four false refutations in 200,000 cap-4
+/// deals. With the rule removed all four come back `solvable`, and the other
+/// 23 refutations in that set stand.
+///
+/// The divergence is at move 4, where nine moves are rules-legal and the rule
+/// offers one: it forces a two up, on the argument that nothing ever needs a
+/// two as a base. That argument is what licenses the rule at every rank cap,
+/// the real game included, so a counterexample at cap 4 refutes it.
+///
+/// Fixed 2026-09-17 by dropping the rank-2 shortcut, so this now passes and is
+/// a regression guard. See `DECISIONS.md`.
+#[test]
+fn safe_autoplay_must_not_refute_a_deal_that_has_a_worry_back_free_win() {
+    let restricted = Gypsy::new(MoveOptions::NO_WORRY_BACK);
+    for seed in [47318, 66930, 104720, 179898] {
+        let state = State::deal_capped(seed, 4);
+        let report = solve(&restricted, &state, config(50_000_000, 10_000)).expect("verified");
+        assert_eq!(
+            report.verdict,
+            Verdict::Solvable,
+            "seed {seed} has a win the restricted arm must find"
+        );
+    }
+}
+
+
