@@ -2770,3 +2770,92 @@ from it; 3M and 48M were correctly not run under the condition as written. At
 48M against a 2,048 MiB table the occupancy is about 36% rather than 9%, so that
 point will displace more than this one did. It stays verdict-safe, and the
 per-budget occupancy figure is worth reporting for exactly that reason.
+
+---
+
+## 2026-09-18 — The budget curve, measured on a thousand deals: the slope was wrong too
+
+**Status:** firm (a measurement). Run by Gizmo on fritter.lol at commit
+`51a6bf0`; report at
+`docs/reports/klondike-budget-sweep-20260917T234829Z.md`, results at
+`docs/results/klondike-full-{3M,12M,48M}-1000deals-restart1.jsonl`.
+
+Full Klondike, restarts off, seeds 0–999, one fixed 2,048 MiB table at every
+budget. The 12M point is the control from the stopped run, kept rather than
+re-run.
+
+| Budget | solvable | unsolvable | unknown | bracket (95%) |
+|---:|---:|---:|---:|---|
+| 3M | 755 | 122 | **12.3%** | 72.7% – 89.7% |
+| 12M | 777 | 142 | **8.1%** | 75.0% – 87.8% |
+| 48M | 791 | 158 | **5.1%** | 76.5% – 86.3% |
+
+All three contain the published 81.945% and every unknown stopped on the node
+budget. The 48M unknowns are a proper subset of the 12M unknowns, which is the
+consistency a budget sweep has to show.
+
+**The slope is 0.644 per fourfold step, not 0.817.** The fifty-deal set gave
+0.817 and that number has been in `DESIGN.md` since 2026-09-16, surviving two
+large improvements to the search and being quoted as evidence that "the curve
+moves down, not round". It was measured on a sample twice as hard as the
+population, and it was wrong about the shape as well as the height. The measured
+multipliers are 0.659 and 0.630, geometric mean **0.644**.
+
+**So the fifty-deal set has now misled this project twice on the same question**
+— once on where the curve starts, once on how fast it falls. Both errors pointed
+the same way, and together they moved the publishable threshold by three orders
+of magnitude.
+
+### What the corrected curve puts the thresholds at
+
+A log-linear fit through the three points gives `u(B) ≈ e^2.647 × B^-0.3175`.
+
+| Threshold | On the measured curve | On the fifty-deal slope |
+|---|---:|---:|
+| 5% unknown | **5.2x10^7** nodes/deal | 3.3x10^8 |
+| 1% unknown | **8.3x10^9** nodes/deal | 2.0x10^13 |
+
+The 5% figure is barely outside the measured range and is worth acting on. The
+1% figure is 170 times past the largest point measured and is a projection, not
+a measurement — `DESIGN.md` has warned twice that an extrapolation of this curve
+fails its own conditions before it arrives, and that warning still stands.
+
+**The gate is one deal away, not an order of magnitude.** 5.1% is 51 unknown
+deals where the gate wants 50 or fewer. A 64M or 96M run settles it and costs
+about two hours on the box, where the last one took 1h26m.
+
+### Time is no longer the constraint anywhere; memory is, and now it has an address
+
+The 48M run cost **1h26m of wall clock** on two workers. Extrapolating the
+aggregate figures, even the 1% budget is days rather than months of compute. The
+wall is the table.
+
+A run stops measuring budget and starts measuring displacement once the
+positions a deal expands approach the table's capacity. At 2,048 MiB that is
+1.34x10^8 entries, and the 48M point already sits at 36% occupancy. Putting the
+fit and the capacity together:
+
+| Target | nodes/deal | table needed per worker |
+|---|---:|---:|
+| 5% | 5.2x10^7 | 0.8 GiB |
+| **~3.7%** | 1.3x10^8 | **2 GiB — what the box has** |
+| 1% | 8.3x10^9 | **124 GiB** |
+
+**So fritter.lol can reach about 3.7% unknown and no further**, which clears the
+5% gate with room and leaves the 1% publishing threshold needing a machine two
+orders of magnitude larger, or another dominance. That is the same conclusion
+`DESIGN.md` reached — the route is dominances — but the number attached to it is
+now 124 GiB rather than 1.7 TB, and the gate in front of it is open rather than
+out of sight.
+
+**A discrepancy in the report, minor and worth recording.** It states 51
+unresolved seeds at 48M and lists 50; the 12M list was complete at 81 of 81. One
+seed is missing from the transcribed working set rather than from the run, and
+the results file is authoritative. The 48M unknown list is the working set for
+the next round of solver work, so it is worth taking from the file rather than
+the report.
+
+**Not affected by the safe-autoplay fix.** That rule fires only with worry-back
+suppressed and this sweep is the full arm; the arm was verified identical to the
+node across the change. The sweep was run on `main` at `51a6bf0`, before the fix
+landed on a branch, and nothing about it needs redoing.

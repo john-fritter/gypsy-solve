@@ -475,38 +475,44 @@ rather than re-deriving:
 - Keep both result files in `docs/results/` as `<game>-<arm>-<budget>-<n>deals
   -{baseline,<rule>}.jsonl`, and append the decision entry with the table.
 
-### Do not run a Gypsy batch yet
+### The Gypsy batch is one deal away
 
-**Measured on a thousand deals, 2026-09-17.** Seeds 0-999, full Klondike, 12M a
-deal: **8.1% unknown** at `--restarts 1` (777 solvable, 142 unsolvable), a
-bracket of 75.0% to 87.8% containing the published figure. At `--restarts 8`,
-12.6% unknown and 29 fewer refutations, which confirms the per-game restart
-policy at a sample size the fifty-deal set could not.
+**Measured on a thousand deals at three budgets, 2026-09-18.** Full Klondike,
+restarts off, seeds 0-999, one fixed 2,048 MiB table throughout:
 
-**The fifty-deal set is twice as hard as the population.** It returns 16%
-unknown at this budget where a thousand deals return 8.1%, and seeds 0-49
-reproduced their recorded run exactly inside this one, so that is the sample and
-not the build. Every reading of the distance to the gate before this date was
-taken off those fifty and was correspondingly pessimistic.
+| Budget | solvable | unsolvable | unknown | bracket (95%) |
+|---:|---:|---:|---:|---|
+| 3M | 755 | 122 | **12.3%** | 72.7% - 89.7% |
+| 12M | 777 | 142 | **8.1%** | 75.0% - 87.8% |
+| 48M | 791 | 158 | **5.1%** | 76.5% - 86.3% |
 
-**What that does to the distance.** On the measured slope of **0.817 per
-fourfold step** — 18%, 16%, 12% at 3M, 12M, 48M on the fifty — 8.1% reaches 5%
-in about 2.4 fourfold steps from 12M, **roughly 3.3x10^8 nodes a deal**. The
-previous estimate here was 400x the 48M budget, 1.9x10^10, and it was wrong
-about the height rather than the slope. Treat this as worth acting on and not
-worth quoting: the slope is still the fifty-deal slope, fitted on the hard
-sample, and an easier sample may fall away at a different rate.
+All three contain the published 81.945%, every unknown stopped on the node
+budget, and the 48M unknowns are a proper subset of the 12M ones.
 
-**Time is no longer the constraint and memory binds later than it looked.** The
-thousand-deal run took **14m 44s of wall clock** on four workers. Table
-occupancy peaked at 18% of a 1,024 MiB table, so nothing was evicting at 12M.
-Re-sweeping 3M / 12M / 48M at a thousand deals is hours and is what turns the
-extrapolation above into a measurement; the 88 CPU-days quoted before was
-computed off the wrong height.
+**The slope is 0.644 per fourfold step.** This file carried 0.817 from
+2026-09-16 to 2026-09-18 and quoted it as the reason budget was not the route.
+That number came off the fifty-deal set, which is twice as hard as the
+population, and it was wrong about the shape as well as the height. The
+fifty-deal set has now misled this project twice on the same question, both
+times in the same direction.
 
-**What has not changed.** 8.1% is not 5%, so the gate holds and no Gypsy batch
-runs yet. And the Gypsy arm still proves **nothing** unsolvable, which no amount
-of Klondike validation substitutes for.
+**5.1% is fifty-one unknown deals where the gate wants fifty.** The fit puts 5%
+at about 5.2x10^7 nodes a deal, barely outside the measured range: a 64M or 96M
+run settles it, and the 48M run took 1h26m on two workers. This is the last
+thing standing between here and Gypsy batch work.
+
+**Time is no longer the constraint anywhere. The table is.** A run stops
+measuring budget and starts measuring displacement as the positions a deal
+expands approach the table's capacity, and the 48M point is already at 36% of a
+2,048 MiB table. Reaching 5% wants 0.8 GiB a worker, 3.7% wants the 2 GiB the
+box has, and **1% wants 124 GiB** — so fritter.lol tops out around 3.7% unknown.
+The 1% figure is also 170 times past the largest point measured and is a
+projection rather than a measurement.
+
+**So the route to a publishable Gypsy figure is still dominances**, for the same
+reason as before and with a smaller number attached: 124 GiB a worker rather
+than the 1.7 TB this file used to quote, and a gate that is open rather than out
+of sight.
 
 Two thresholds, and they are different:
 
