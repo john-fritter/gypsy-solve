@@ -3086,12 +3086,30 @@ Seed 12, restricted arm, **300M contiguous nodes** and no restarts, which is the
 only shape that can produce a refutation: **`unknown`, stopped on the budget.**
 No sign of approaching exhaustion.
 
-That is weak evidence and should not be leaned on. A 2,048 MiB table holds
-1.34x10^8 entries against 3x10^8 nodes expanded, so the table was oversubscribed
-by better than two to one and an unknown share of that budget went on
-re-expansion rather than new ground. A real test wants a table that can hold the
-search — about 4.8 GiB — and that is the measurement to run before concluding
-anything about whether Gypsy refutations are reachable.
+Seeds 23 and 32 did the same. All three were oversubscribed, though — a 2,048
+MiB table holds 1.34x10^8 entries against 3x10^8 nodes expanded — so the run was
+repeated at a budget the table can hold. **Seed 12, 100M nodes, 2,048 MiB: still
+`unknown`, and `table_filled` 89,586,032, so 89.6% of expansions were finding
+positions never seen before**, at 66.7% occupancy.
+
+**The frontier is not closing.** A hundred million nodes into that deal the
+search is still almost entirely on new ground, so the reachable game is far
+larger than anything on this budget curve and exhaustion is nowhere in sight.
+
+**What it does not show is that Gypsy refutations are unreachable**, and the
+selection is the reason. These three seeds were picked because they are the
+*hardest* — unresolved at 48M with 32 restarts. They are large deals, and a
+large deal is exactly the one that cannot be exhausted whether it is winnable or
+not. A refutation, if the game has any, comes from an **unwinnable and small**
+deal, and nothing in this probe looks for one.
+
+**The run that would look for one has never been done.** Every thousand-deal
+Gypsy run used restarts, and a 1.5M slice cannot exhaust a game, so none of them
+could return `unsolvable` at all. Contiguous-budget Gypsy runs exist only at
+fifty deals. **A thousand deals with `--restarts 1` at a contiguous budget is
+the cheapest way to find out whether this game has a reachable refutation** — it
+resolves fewer deals than the restart configuration, which is the point: it is
+the only configuration that can prove one.
 
 **Worth stating plainly regardless: every thousand-deal Gypsy run so far used
 restarts, and a restart slice of 1.5M nodes cannot exhaust a full-size game. No
