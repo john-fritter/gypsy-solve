@@ -3030,3 +3030,70 @@ impossible nor a hardware question.
 that was wrong by a wide margin, and the third and fourth points are what made
 it trustworthy. A 192M / restart-128 point costs about half a day and decides
 whether the three-day run is worth starting.
+
+---
+
+## 2026-09-19 — `branching` measures the first descent, not where the budget goes
+
+**Status:** firm (a measurement, and a correction to a reading made the same
+day). The split-run rule is unchanged and unchallenged.
+
+Asked where Gypsy's branching factor now goes, `cargo run --bin branching`
+returned: **61% of moves in the full arm and 72% in the restricted arm are
+partial-run moves whose exposed card is dead** — exactly what the split-run rule
+cuts — while positions with an exhausted stock are **0.18–0.24%** and positions
+satisfying *both* of the rule's gates are **0.00%**.
+
+Read as a share of the search, that says the rule almost never fires. **It is
+not a share of the search, and the conclusion was wrong.**
+
+**Measured directly instead**, by deleting `splits_a_run_for_nothing` and
+re-solving seeds 0–49 at 12M restart-8, both arms, against the recorded run:
+
+| Arm | with the rule | rule deleted |
+|---|---|---|
+| restricted | 44 solvable, 6 unknown | **38 solvable, 12 unknown** |
+| full | 45 solvable, 5 unknown | **40 solvable, 10 unknown** |
+| nodes | 2.262x10^8 | **4.070x10^8 (+79.9%)** |
+
+**Eleven verdicts and eighty per cent of the nodes.** Every difference is
+`solvable` becoming `unknown`, never the reverse. The rule is one of the most
+valuable things in the solver, and the 0-of-50 to 29-of-50 improvement recorded
+when it shipped is entirely credible.
+
+**Why the tool says otherwise.** It samples along the search's *first descent* —
+ten seeds, fifty thousand steps — and stock moves sort last in the ordering, so
+a descent defers pressing the stock and seldom reaches an empty-stock position.
+The search as a whole plainly reaches them in quantity. The tool measures the
+shape of the descent, which is what it was written for and what its own doc
+comment says; it does not measure where the budget is spent.
+
+**So its percentages are first-descent percentages**, including the 42% figure
+recorded when the incomplete-pile rule was sized on 2026-09-16. They are fine
+for what they were used for — spotting that a class of move is large enough to
+be worth a rule — and must not be quoted as the share of the search a rule cuts.
+**The way to measure that is to delete the rule and re-run**, which costs one
+batch run and answers the question directly.
+
+**Nothing here argues against widening the gates.** The 61–72% removable figure
+is still real in the region sampled, and Gate 1 still blocks the rule wherever
+the stock is live. What is gone is the evidence that the gates make the rule
+useless — they plainly do not.
+
+### Also probed: can a full-size Gypsy deal be exhausted at all?
+
+Seed 12, restricted arm, **300M contiguous nodes** and no restarts, which is the
+only shape that can produce a refutation: **`unknown`, stopped on the budget.**
+No sign of approaching exhaustion.
+
+That is weak evidence and should not be leaned on. A 2,048 MiB table holds
+1.34x10^8 entries against 3x10^8 nodes expanded, so the table was oversubscribed
+by better than two to one and an unknown share of that budget went on
+re-expansion rather than new ground. A real test wants a table that can hold the
+search — about 4.8 GiB — and that is the measurement to run before concluding
+anything about whether Gypsy refutations are reachable.
+
+**Worth stating plainly regardless: every thousand-deal Gypsy run so far used
+restarts, and a restart slice of 1.5M nodes cannot exhaust a full-size game. No
+Gypsy run this project has ever done was capable of returning `unsolvable`.**
+The absence of refutations is not yet evidence that they are hard.
