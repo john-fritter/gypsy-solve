@@ -2935,3 +2935,98 @@ the recorded fifty-deal throughput — 168 to 191 knodes a second — a thousand
 deals costs about 7.4 aggregate hours at 12M restart-8 and 15.4 at 48M
 restart-32, both arms. Under a day on four workers, unless the population is
 harder than seeds 0-49, which is precisely what the run exists to find out.
+
+---
+
+## 2026-09-19 — The first thousand Gypsy deals: the fifty-deal set was flattering, and the worry-back delta is a search artifact
+
+**Status:** firm (a measurement). Run by Gizmo at `2d72ec5`; report at
+`docs/reports/gypsy-first-survey-20260919T015802Z.md`, results at
+`docs/results/gypsy-both-{12M-restart8,48M-restart32}-1000deals.jsonl`.
+
+Both arms, seeds 0–999, 256 MiB tables, four workers.
+
+| Budget | restricted | full |
+|---|---|---|
+| 12M as 8 x 1.5M | 768 solvable, **232 unknown (23.2%)** | 789, **211 (21.1%)** |
+| 48M as 32 x 1.5M | 875 solvable, **125 unknown (12.5%)** | 885, **115 (11.5%)** |
+
+**Not one deal proved unsolvable, in either arm at either budget.** Two thousand
+deal-solves and the Gypsy arm still has no refutation at thirteen ranks.
+
+### The fifty-deal set was wrong again, and this time the other way
+
+It returns 12.0% restricted unknown at 12M where a thousand deals return 23.2%,
+and 8.0% at 48M against 12.5%. **Seeds 0–49 are roughly half as hard as the
+population on Gypsy**, where on Klondike they were twice as hard.
+
+That corrects a framing this session used twice. The lesson from the Klondike
+sweep was written down as "the fifty-deal set is pessimistic". It is not: it is
+*unreliable*, and the direction is not predictable from the game. Every number
+this project ever took from fifty deals should be read as having an error bar
+nobody measured, in either direction.
+
+### The worry-back delta, measured properly for the first time — and it is shrinking
+
+The count of deals the full arm resolves and the restricted arm does not:
+
+| Budget | disagreements | the other direction |
+|---|---:|---:|
+| 12M | 21 of 1,000 (2.1%) | 0 |
+| 48M | **10 of 1,000 (1.0%)** | 0 |
+
+**More budget halved it, which is the signature of a search artifact rather than
+a property of the deals.** If worry-back were *needed* to win those deals, budget
+could not take them away from the restricted arm. Following the seeds settles
+it: of the 21 disagreements at 12M, **17 were resolved by the restricted arm
+itself at 48M**. Only four survive to 48M, and six new ones appear that were
+unknown in both arms at 12M. The set churns; it is not a set of deals with a
+property.
+
+**And none of it is evidence about winnability, by construction.** Every
+disagreement is restricted `unknown` against full `solvable` — never restricted
+`unsolvable`. A deal the restricted arm ran out of budget on says nothing about
+whether it can be won without worry-back. **To prove a delta you need a deal that
+is restricted-`unsolvable` and full-`solvable`, and Gypsy has proved nothing
+unsolvable at thirteen ranks at all.** At rank cap 4, where 23 refutations do
+exist, both arms agreed on every one of them.
+
+**So the honest statement of the project's second question today is: the measured
+worry-back delta is zero, with an upper bound of 1.0% that is falling as the
+search improves.** That is a finding, and it is not the one `DESIGN.md` was
+written expecting. It should not be dressed up as one until a Gypsy refutation
+exists to test it against.
+
+### The fix is confirmed on Gypsy, and that item is closed
+
+Run 1 re-solved seeds 0–49 at 12M restart-8 against the recorded baseline:
+**zero verdicts contradicted and zero verdicts changed**, 44/0/6 restricted and
+45/0/5 full, exactly as recorded. This is the 12M re-measure owed since
+2026-09-17, when it was abandoned locally for wall clock. Safe autoplay's
+corrected form costs Gypsy nothing at a budget that resolves.
+
+### The curve, and the constraint that is not memory
+
+The restricted arm goes 23.2% to 12.5% over a fourfold step: a multiplier of
+**0.539**, steeper than Klondike's 0.644. Two points only, and the restart count
+moved from 8 to 32 with the budget, so this is a step on the tuned
+configurations rather than a pure budget curve. Treat it as provisional.
+
+On that slope, 1% unknown is about **1.4x10^10 nodes a deal**, four fourfold
+steps past 48M.
+
+**There is no memory wall here, and that is the important difference from
+Klondike.** Each restart is a fresh `solve` with its own table, so the table is
+sized by the 1.5M slice and not by the total: occupancy was **8.94% at both
+budgets** and would stay there at any budget. Klondike's 1% threshold wanted 124
+GiB a worker; Gypsy's wants 256 MiB.
+
+That leaves time alone. The 48M run cost **3h07m** of wall clock on four
+workers. Scaling the unknown-dominated part by roughly 4 x 0.539 per step puts
+four more steps at something like **three days on this box** — long, but neither
+impossible nor a hardware question.
+
+**Before committing to that, pin the slope.** Two points gave Klondike a slope
+that was wrong by a wide margin, and the third and fourth points are what made
+it trustworthy. A 192M / restart-128 point costs about half a day and decides
+whether the three-day run is worth starting.
