@@ -3115,3 +3115,96 @@ the only configuration that can prove one.
 restarts, and a restart slice of 1.5M nodes cannot exhaust a full-size game. No
 Gypsy run this project has ever done was capable of returning `unsolvable`.**
 The absence of refutations is not yet evidence that they are hard.
+
+---
+
+## 2026-09-20 — Seed 188: the first full-size Gypsy refutation, and the verification criterion that nearly threw it away
+
+**Status:** firm. Run 1 of the contiguous hunt, by Gizmo at `2d72ec5`; report at
+`docs/reports/gypsy-refutation-hunt-run1-20260920T032623Z.md`. The verification
+below was run here.
+
+**Seed 188 cannot be won.** It is exhausted, with no limit touched, in both
+arms:
+
+| Configuration | Arm | Verdict | Nodes |
+|---|---|---|---:|
+| all dominances | restricted | `unsolvable` | 4,203,474 |
+| safe-foundation forcing removed | restricted | `unsolvable` | 4,203,474 |
+| split-run filter removed | restricted | `unsolvable` | 4,671,078 |
+| **safe autoplay removed** | restricted | **`unsolvable`** | **226,504,270** |
+| all dominances | **full** | **`unsolvable`** | **19,801,449** |
+
+Every rule removed in turn leaves the verdict standing, and the **full** arm
+reaches it independently — worry-back does not save this deal either.
+
+**This is the first thing the project has ever proved about Gypsy in the losing
+direction.** Until today every Gypsy verdict was `solvable` or `unknown`, the
+answer could only be "at least X% winnable", and no dominance could be tested
+in the direction where a wrong one fails. **Gypsy's winnability is now known to
+be below 100%.** The bracket has two sides.
+
+**And refutations are cheap.** 4.2M nodes restricted, 19.8M full, both well
+inside budgets already run routinely. The fear recorded on 2026-09-19 — that
+exhaustion might be structurally out of reach at thirteen ranks, so that no
+amount of budget could ever close the unknown bucket — is answered for at least
+one deal. Jammed deals have small reachable games and the search finds the end
+of them.
+
+**Why the thousand-deal run nearly missed it.** The contiguous run gave each
+deal 12M. The restricted arm found the refutation at 4.2M, but the full arm
+needs 19.8M and came back `unknown` — four megabytes of budget short of proving
+the same deal twice.
+
+### The criterion was wrong, and it was ours
+
+The hunt prompt asked for any refutation to be re-solved with each dominance
+removed, and said: *"one that changes to `solvable` or `unknown` with a rule
+removed is that rule failing"*. **Including `unknown` was the error.**
+
+Removing a dominance makes the tree larger. A search that exhausts the smaller
+tree in 4.2M nodes need not exhaust the larger one in 12M — and with safe
+autoplay removed this one needs **226M**. Gizmo re-ran at 12M, got `unknown` at
+exactly 12,000,000 nodes, and followed the criterion as written to the
+conclusion that safe autoplay is unsound and the refutation invalid. Both
+conclusions were wrong, and the instruction produced them.
+
+**The correct criterion: only `unsolvable` becoming `solvable` shows a rule
+failing**, because that is the direction a discarded winning line surfaces in.
+`unsolvable` becoming `unknown` means the budget was too small for the bigger
+tree and the test is inconclusive until it is raised.
+
+**Safe autoplay is not merely exonerated, it is measured**: on this deal it is
+worth **54x**, 4.2M nodes against 226M. The rule whose shortcut was removed on
+2026-09-17 is doing more work than anything else in the restricted arm.
+
+**A near miss worth recording.** Had the criterion stood, the project would have
+discarded its first refutation and spent the next session hunting a bug in a
+sound and valuable rule — the exact inverse of the 2026-09-17 error, where a
+genuinely unsound rule went unnoticed. Both directions cost, and the deal set
+that catches one does not catch the other.
+
+### What seed 188 becomes
+
+**A regression fixture, and the only one of its kind.** It is the single Gypsy
+position at thirteen ranks where a future unsound dominance shows itself by
+turning `unsolvable` into `solvable`. The rank-4 set catches gross errors and
+missed a one-rank one; this catches anything that discards the winning lines of
+a deal that has none to discard.
+
+**Not a worry-back delta.** Seed 188 is unwinnable in both arms, so it says
+nothing about the project's second question. The measured delta stands at zero.
+
+**One deal is one deal.** A single refutation in a thousand says Gypsy is below
+100% and says nothing yet about where. The 48M half of the hunt was not run; it
+should be, now that the criterion is fixed and the first result is in hand.
+
+### Also measured
+
+Contiguous 12M over a thousand deals: **48.3% restricted unknown and 47.6%
+full**, against 23.2% and 21.1% at the same budget with eight restarts. That is
+the price of the only configuration that can refute anything, and it is steep.
+
+**A trap in the table flag**: `Table::with_entries` rounds up to a power of two,
+so `--table-mib 10240` asks the allocator for 16 GiB rather than 10. Pass powers
+of two.

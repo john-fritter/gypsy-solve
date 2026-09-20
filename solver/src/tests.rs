@@ -335,3 +335,44 @@ fn safe_autoplay_must_not_refute_a_deal_that_has_a_worry_back_free_win() {
 }
 
 
+
+/// Seed 188: the only Gypsy deal at thirteen ranks known to be unwinnable, and
+/// the only test here that can catch a dominance which discards winning lines
+/// in the real game.
+///
+/// Every other Gypsy check replays a win, and replaying a win cannot fail in
+/// that direction: a rule that throws away the *last* winning line turns a
+/// solvable deal into `unsolvable`, which needs a deal with no winning line to
+/// notice. The rank-4 set (`the_capped_deal_that_cannot_be_won_stays_unwon`)
+/// supplies those at four ranks; this is the full game.
+///
+/// Proved on 2026-09-20 with each dominance removed in turn — 4,203,474 nodes
+/// restricted with all of them, 226,504,270 with safe autoplay removed, and
+/// 19,801,449 in the full arm, every one exhausted without touching a limit.
+/// Worry-back does not save it either. See `DECISIONS.md`.
+///
+/// The restricted arm is the cheap one and is what runs here. If this ever
+/// returns `solvable`, a dominance is discarding winning lines. If it returns
+/// `unknown`, the search stopped exhausting a game it used to finish, which is
+/// a budget question rather than a soundness one — raise it and re-check rather
+/// than concluding anything.
+#[test]
+fn the_deal_that_cannot_be_won_stays_unwon() {
+    let state = State::deal(188);
+    // The shared `config` helper gives 65,536 entries, which a 4.2M-node
+    // exhaustive search oversubscribes sixty-four fold: it would thrash and
+    // never reach the end. An exhaustion test has to hold what it expands.
+    let report = solve(
+        &Gypsy::new(MoveOptions::NO_WORRY_BACK),
+        &state,
+        Config {
+            node_budget: 12_000_000,
+            max_depth: 100_000,
+            table_entries: 1 << 23,
+            ordering_salt: 0,
+        },
+    )
+    .expect("a refutation has no line to verify");
+    assert_eq!(report.verdict, Verdict::Unsolvable);
+    assert_eq!(report.limit, None, "stopped on a limit rather than exhausting");
+}

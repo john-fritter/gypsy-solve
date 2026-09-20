@@ -75,10 +75,25 @@ This project has had a false refutation before: a dominance that discarded
 winning lines made winnable deals look unsolvable, and it went unnoticed for a
 week. Re-solve each refuted seed three more times, each with **one** of the
 three dominances removed from `legal_actions` — safe autoplay, the
-safe-foundation forcing rule, and the split-run filter. A genuine refutation
-survives all three; one that changes to `solvable` or `unknown` with a rule
-removed is that rule failing, which is a far more important finding than the
-refutation and should be reported as such.
+safe-foundation forcing rule, and the split-run filter.
+
+**Read the result carefully, because two of the three outcomes are not
+failures.**
+
+- Still `unsolvable` → the refutation survives that removal. Good.
+- **`solvable`** → that rule discarded a winning line. **This is the only
+  outcome that shows a rule failing**, and it matters more than the refutation.
+- **`unknown` → inconclusive, not a failure.** Removing a dominance makes the
+  tree bigger, and a search that exhausted the smaller tree may not exhaust the
+  larger one on the same budget. **Raise the budget and re-run that variant
+  until it decides.** Expect to need a great deal more: on the one refutation
+  this project has, removing safe autoplay took the cost from 4.2M nodes to
+  226M, a factor of 54. A budget-limited `unknown` says nothing about soundness
+  and must not be reported as invalidating anything.
+
+Use a table sized to the raised budget, and pass **powers of two** to
+`--table-mib`: the table rounds its entry count up to a power of two, so 10,240
+MiB asks the allocator for 16 GiB.
 
 ## What else to report
 
