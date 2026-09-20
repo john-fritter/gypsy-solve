@@ -3134,9 +3134,23 @@ arms:
 | split-run filter removed | restricted | `unsolvable` | 4,671,078 |
 | **safe autoplay removed** | restricted | **`unsolvable`** | **226,504,270** |
 | all dominances | **full** | **`unsolvable`** | **19,801,449** |
+| **every dominance removed** | **full** | **`unsolvable`** | **1,076,602,384** |
 
 Every rule removed in turn leaves the verdict standing, and the **full** arm
-reaches it independently — worry-back does not save this deal either.
+reaches it independently — worry-back does not save this deal either. The last
+row is the one that settles it: **with all three rules gone the raw rules alone
+exhaust the game and agree**, so the refutation inherits nothing from any
+dominance or any proof behind one.
+
+That run filled its table completely — 536,619,615 of 536,870,912 entries — and
+it does not matter. Losing a table entry costs a re-expansion and never a
+verdict, which is the property `table.rs` was built around: a displaced position
+is explored again rather than skipped. A full table can stop a search
+*finishing*; it cannot make a search that did finish wrong. This one finished
+without touching a limit.
+
+**The full arm's own dominances are worth the same 54x as safe autoplay is to
+the restricted arm** — 19.8M nodes against 1.08 billion.
 
 **This is the first thing the project has ever proved about Gypsy in the losing
 direction.** Until today every Gypsy verdict was `solvable` or `unknown`, the

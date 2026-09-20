@@ -349,7 +349,9 @@ fn safe_autoplay_must_not_refute_a_deal_that_has_a_worry_back_free_win() {
 /// Proved on 2026-09-20 with each dominance removed in turn — 4,203,474 nodes
 /// restricted with all of them, 226,504,270 with safe autoplay removed, and
 /// 19,801,449 in the full arm, every one exhausted without touching a limit.
-/// Worry-back does not save it either. See `DECISIONS.md`.
+/// Worry-back does not save it either, and with **every** dominance removed the
+/// raw rules exhaust it too, in 1,076,602,384 nodes. The verdict rests on the
+/// rules alone. See `DECISIONS.md`.
 ///
 /// The restricted arm is the cheap one and is what runs here. If this ever
 /// returns `solvable`, a dominance is discarding winning lines. If it returns
