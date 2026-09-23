@@ -191,6 +191,19 @@ Both records for a deal are written together, and resume treats a deal as done
 only when every ruleset the run writes is present, so a kill between them costs
 that one deal rather than silently dropping an arm.
 
+**Sizing the table is not one rule but two, and they point opposite ways.**
+With `--restarts k` each slice is a separate search with its own table, so the
+table only ever holds one slice's positions — at the 1.5M slices the tuned Gypsy
+configurations use, 256 MiB sits under 10% full whatever the total budget, and a
+larger table buys nothing. With `--restarts 1` the search holds everything it
+expands, so the table must be sized to the *budget*: a 48M contiguous search
+wants about 2 GiB. Carrying the restart figure over to a contiguous run
+oversubscribes it severalfold and spends the budget re-expanding ground already
+covered.
+
+Pass **powers of two** to `--table-mib`. The entry count rounds up to a power of
+two, so 10,240 MiB asks the allocator for 16 GiB.
+
 It refuses to start when the run would not fit. Each worker holds its own
 transposition table *and* its own search stack, and the stack is not small: at
 the default `--max-depth` it can reach around 390 MiB, so four workers at 1 GiB

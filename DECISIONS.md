@@ -3329,3 +3329,61 @@ through 96M, and the larger attempts could not allocate a table on that box. It
 is inconclusive rather than a failure, and it is finishable on a machine with
 more memory. Until it is, seed 3796's full-arm refutation is the one result in
 the set not verified against every rule; its restricted refutation is clean.
+
+---
+
+## 2026-09-23 — Correction: the winnability bracket was a sample bracket quoted as a population claim
+
+**Status:** firm. Corrects *Five refutations in five thousand deals, and the
+first bracket with two real sides* (earlier today), whose headline sentence —
+"Gypsy's thoughtful winnability is between 87.5% and 99.9%" — is wrong as
+written. The measurements it rests on are unchanged; the inference from them was
+not sound.
+
+**What went wrong.** 875 solvable and 1 unsolvable of 1,000 gives a bracket on
+*those thousand deals*. Quoting it as Gypsy's winnability treats a sample as the
+population, with no allowance for sampling error. `analysis/klondike_validation.py`
+has always been careful to print both lines — "in this sample" and "allowing for
+sampling error, 95%" — and the Gypsy claim skipped the second.
+
+**Also understated.** Merging every run on seeds 0–999 rather than reading the
+48M restart run alone: the contiguous run resolves three deals that run left
+unknown, so the merged sample is **878 solvable, 1 unsolvable, 121 unknown**.
+
+| | |
+|---|---|
+| sample bracket, merged seeds 0–999 | 87.8% – 99.9% |
+| **population, Wilson 95%** | **85.6% – 99.96%** |
+
+**The lower bound survives. The upper bound does not.** "At most 99.96%" is
+barely a statement: five refutations in five thousand deals constrain the
+population's unwinnable rate from below only weakly — Wilson puts it at
+**≥0.043%**. The 99.9% figure carried no sampling allowance at all.
+
+**The two ends come from different samples and that is deliberate.** The lower
+bound uses the thousand seeds that got the strongest search (48M with restarts);
+the upper uses all five thousand contiguous deals, because constraining a rare
+event needs deals rather than depth. Each is a valid one-sided claim about the
+same population. Quoting them as one interval is loose and should be labelled
+whenever it is done.
+
+**What can honestly be said today: at least about 85% of Gypsy deals are
+winnable, and at least a few per thousand are not.** The upper bound is not yet
+worth quoting.
+
+### The assumption underneath every interval here
+
+Wilson assumes an i.i.d. sample. Ours is SplitMix64 shuffles of sequential
+seeds, and **nobody has tested that this gives an unbiased sample of deals** —
+`DESIGN.md` carries it as an open question. Every confidence interval in this
+project, Klondike's included, rests on it.
+
+The indirect evidence is good: Klondike's measured rate brackets the published
+81.945% at 3M, 12M, 48M and 64M and across 50- and 1,000-deal samples, which a
+badly non-uniform shuffle would be likely to break. That is inference from a
+validation designed for something else, not a test of the shuffle. A direct
+check — the distribution of some cheap per-deal statistic against its
+combinatorial expectation — is cheap and has never been run.
+
+**Rule from here: a winnability number is quoted with its sampling allowance and
+its sample size, or it is not quoted.**
