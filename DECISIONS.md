@@ -3324,11 +3324,17 @@ Every Run 2 refutation was re-checked with each dominance removed, and this time
 `unknown` results were **escalated rather than called failures** — the corrected
 criterion doing its job. Nothing failed.
 
-One gap: seed 3796's **full-arm** safe-foundation removal stayed `unknown`
-through 96M, and the larger attempts could not allocate a table on that box. It
-is inconclusive rather than a failure, and it is finishable on a machine with
-more memory. Until it is, seed 3796's full-arm refutation is the one result in
-the set not verified against every rule; its restricted refutation is clean.
+One gap, since closed. Seed 3796's **full-arm** safe-foundation removal stayed
+`unknown` through 96M on fritter.lol, which could not allocate a larger table.
+Finished here the same day: **`unsolvable` in 1,164,085,585 nodes**, no limit
+touched. It needed **130x** the 8,967,671 of the baseline, so Gizmo's 96M
+attempt stopped at eight per cent of the way — a textbook case of the corrected
+criterion, where the honest reading of an `unknown` is "not enough budget".
+
+**All five refutations are now verified against every dominance**, and that 130x
+is the largest such multiplier measured: safe-foundation forcing is worth more
+to the full arm on this deal than safe autoplay's 54x is to the restricted arm
+on seed 188.
 
 ---
 
