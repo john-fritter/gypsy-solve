@@ -3287,15 +3287,36 @@ where the restricted arm ran out of budget and the full arm found a win. **No
 deal is restricted-`unsolvable` and full-`solvable`**, which remains the only
 pair that would prove worry-back changes winnability.
 
-Three deals are restricted-`unsolvable` with the full arm `unknown` — the only
-candidates that exist. **Seed 188 was settled on 2026-09-20: its full arm
-exhausts to `unsolvable` in 19,801,449 nodes, so it is not one.** Seeds **3966**
-and **4260** are open, and resolving them is two solve calls rather than a run.
-If either comes back `solvable`, this project's second question has an answer
-after six days of measurement returning nothing.
+Three deals were restricted-`unsolvable` with the full arm `unknown` — the only
+candidates that could exist. **All three are now settled, and all three are
+`unsolvable` with worry-back legal too:**
 
-So the genuinely-unwinnable rate — unwinnable *with* worry-back — is between
-**3 in 5,000 and 5 in 5,000** until those two land.
+| Seed | restricted | full | ratio |
+|---:|---:|---:|---:|
+| 4617 | 3,202 | 3,211 | 1.0x |
+| 3796 | 2,283,094 | 8,967,671 | 3.9x |
+| 188 | 4,203,474 | 19,801,449 | 4.7x |
+| 4260 | 5,692,561 | 13,997,443 | 2.5x |
+| 3966 | 7,713,489 | 48,274,857 | 6.3x |
+
+**Every deal that cannot be won without worry-back cannot be won with it
+either.** The worry-back delta is **zero on every deal where the question is
+decidable**, and there are no candidates left in five thousand deals.
+
+That also corrects the full arm's rate: its 0.04% was entirely an artifact of
+the 12M cap, and **both arms refute the same five deals, 0.10%**. The
+genuinely-unwinnable rate is 5 in 5,000, not a range.
+
+**And it prices worry-back**: exhausting a refutation with worry-back legal
+costs 1.0x to 6.3x the restricted arm, so the larger move set roughly
+quadruples the work without changing a single verdict.
+
+**`DESIGN.md` calls the worry-back delta the headline finding. On the evidence
+it is a null result** — not "too small to measure" but zero wherever the
+question can be put, across two deal sets (five thousand at thirteen ranks, and
+every refutation at rank cap 4) and every measurement this project has made.
+That is worth reporting as a finding in its own right rather than as a
+disappointment, and it should be stated plainly in the writeup.
 
 ### The verification behaved, and one check is owed
 

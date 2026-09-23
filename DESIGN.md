@@ -51,8 +51,12 @@ differ; **any published number is meaningless without this ruleset attached.**
    enabled — and report the difference in percentage points. This doubles as a
    staged build: the no-worry-back solver is much easier and ships first.
 
-   **Measured on a thousand deals, 2026-09-19: the delta is zero**, with a
-   falling upper bound. The two arms disagree on 2.1% of deals at 12M and 1.0%
+   **Settled 2026-09-23: the delta is zero, and not merely unmeasured.** All
+   five deals proved unwinnable without worry-back across five thousand are
+   also proved unwinnable *with* it — 4617, 3796, 188, 4260, 3966 — so there is
+   no deal anywhere in the sample that worry-back rescues, and no candidate
+   left. Worry-back costs 1.0x to 6.3x the nodes to exhaust and changes no
+   verdict. Earlier, on a thousand deals: The two arms disagree on 2.1% of deals at 12M and 1.0%
    at 48M, and every disagreement is restricted `unknown` against full
    `solvable` — never restricted `unsolvable`. Seventeen of the 21 at 12M were
    resolved by the restricted arm itself at 48M, so the set is a search artifact
