@@ -3222,3 +3222,89 @@ the price of the only configuration that can refute anything, and it is steep.
 **A trap in the table flag**: `Table::with_entries` rounds up to a power of two,
 so `--table-mib 10240` asks the allocator for 16 GiB rather than 10. Pass powers
 of two.
+
+---
+
+## 2026-09-23 — Five refutations in five thousand deals, and the first bracket with two real sides
+
+**Status:** firm (a measurement). Run 2 by Gizmo at `2d72ec5`; report at
+`docs/reports/gypsy-refutation-hunt-run2-20260923T181048Z.md`, results at
+`docs/results/gypsy-both-12M-seeds1000-4999-contiguous.jsonl`. Seeds 1000–4999,
+contiguous 12M, both arms, identical to Run 1 in every other parameter.
+
+The seed-188 canary passed on a rebuilt `main` before the run: `unsolvable`,
+4,203,474 nodes, to the node.
+
+| Sample | arm | solvable | unsolvable | unknown |
+|---|---|---:|---:|---:|
+| Run 2, 4,000 deals | restricted | 2,098 | **4** | 1,898 (47.45%) |
+| Run 2 | full | 2,123 | **2** | 1,875 (46.88%) |
+| **combined 5,000** | restricted | 2,614 | **5 (0.10%)** | 2,381 |
+| **combined 5,000** | full | 2,647 | **2 (0.04%)** | 2,351 |
+
+**The population is stable.** Run 2's unknown fractions land within a point of
+Run 1's 48.3% and 47.6% on four thousand fresh seeds, which is the first
+evidence in this project that a Gypsy sample behaves like the one before it.
+
+### What the refutations cost, and why that matters
+
+| Seed | arm | nodes to exhaust |
+|---:|---|---:|
+| 4617 | restricted | **3,202** |
+| 3796 | restricted | 2,283,094 |
+| 188 | restricted | 4,203,474 |
+| 4260 | restricted | 5,692,561 |
+| 3966 | restricted | 7,713,489 |
+| 4617 | full | 3,211 |
+| 3796 | full | 8,967,671 |
+
+**Every one lands under 9M against a 12M budget**, and seed 4617 jams so early
+it exhausts in 3,202 nodes. That is the shape predicted when Run 2 was chosen
+over a budget increase: unwinnable deals have small reachable games, and the
+budget is not what limits how many are found.
+
+**The corollary is a warning.** A budget that catches everything under 9M says
+nothing about deals needing 20M, and the full arm shows the effect directly —
+it found two refutations where the restricted arm found four, because its trees
+are larger. Seed 188's full arm needs 19.8M and came back `unknown` here.
+**The full arm's 0.04% is a floor, not an estimate.**
+
+### The bracket now has two sides
+
+Merging what is proved for seeds 0–999 across configurations — the 48M
+restart-32 run resolved 875 of 1,000 winnable, and the contiguous run proved
+seed 188 unwinnable, a deal that sits in the restart run's unknown list —
+
+**Gypsy's thoughtful winnability is between 87.5% and 99.9%.**
+
+Wide, and it is the first statement this project can make that is bounded above
+as well as below. Everything before today was "at least X%".
+
+### The worry-back delta: still zero, and now down to two open deals
+
+Across five thousand deals the arms disagree in one direction only: 33 deals
+where the restricted arm ran out of budget and the full arm found a win. **No
+deal is restricted-`unsolvable` and full-`solvable`**, which remains the only
+pair that would prove worry-back changes winnability.
+
+Three deals are restricted-`unsolvable` with the full arm `unknown` — the only
+candidates that exist. **Seed 188 was settled on 2026-09-20: its full arm
+exhausts to `unsolvable` in 19,801,449 nodes, so it is not one.** Seeds **3966**
+and **4260** are open, and resolving them is two solve calls rather than a run.
+If either comes back `solvable`, this project's second question has an answer
+after six days of measurement returning nothing.
+
+So the genuinely-unwinnable rate — unwinnable *with* worry-back — is between
+**3 in 5,000 and 5 in 5,000** until those two land.
+
+### The verification behaved, and one check is owed
+
+Every Run 2 refutation was re-checked with each dominance removed, and this time
+`unknown` results were **escalated rather than called failures** — the corrected
+criterion doing its job. Nothing failed.
+
+One gap: seed 3796's **full-arm** safe-foundation removal stayed `unknown`
+through 96M, and the larger attempts could not allocate a table on that box. It
+is inconclusive rather than a failure, and it is finishable on a machine with
+more memory. Until it is, seed 3796's full-arm refutation is the one result in
+the set not verified against every rule; its restricted refutation is clean.
