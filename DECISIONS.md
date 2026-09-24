@@ -2935,3 +2935,461 @@ the recorded fifty-deal throughput — 168 to 191 knodes a second — a thousand
 deals costs about 7.4 aggregate hours at 12M restart-8 and 15.4 at 48M
 restart-32, both arms. Under a day on four workers, unless the population is
 harder than seeds 0-49, which is precisely what the run exists to find out.
+
+---
+
+## 2026-09-19 — The first thousand Gypsy deals: the fifty-deal set was flattering, and the worry-back delta is a search artifact
+
+**Status:** firm (a measurement). Run by Gizmo at `2d72ec5`; report at
+`docs/reports/gypsy-first-survey-20260919T015802Z.md`, results at
+`docs/results/gypsy-both-{12M-restart8,48M-restart32}-1000deals.jsonl`.
+
+Both arms, seeds 0–999, 256 MiB tables, four workers.
+
+| Budget | restricted | full |
+|---|---|---|
+| 12M as 8 x 1.5M | 768 solvable, **232 unknown (23.2%)** | 789, **211 (21.1%)** |
+| 48M as 32 x 1.5M | 875 solvable, **125 unknown (12.5%)** | 885, **115 (11.5%)** |
+
+**Not one deal proved unsolvable, in either arm at either budget.** Two thousand
+deal-solves and the Gypsy arm still has no refutation at thirteen ranks.
+
+### The fifty-deal set was wrong again, and this time the other way
+
+It returns 12.0% restricted unknown at 12M where a thousand deals return 23.2%,
+and 8.0% at 48M against 12.5%. **Seeds 0–49 are roughly half as hard as the
+population on Gypsy**, where on Klondike they were twice as hard.
+
+That corrects a framing this session used twice. The lesson from the Klondike
+sweep was written down as "the fifty-deal set is pessimistic". It is not: it is
+*unreliable*, and the direction is not predictable from the game. Every number
+this project ever took from fifty deals should be read as having an error bar
+nobody measured, in either direction.
+
+### The worry-back delta, measured properly for the first time — and it is shrinking
+
+The count of deals the full arm resolves and the restricted arm does not:
+
+| Budget | disagreements | the other direction |
+|---|---:|---:|
+| 12M | 21 of 1,000 (2.1%) | 0 |
+| 48M | **10 of 1,000 (1.0%)** | 0 |
+
+**More budget halved it, which is the signature of a search artifact rather than
+a property of the deals.** If worry-back were *needed* to win those deals, budget
+could not take them away from the restricted arm. Following the seeds settles
+it: of the 21 disagreements at 12M, **17 were resolved by the restricted arm
+itself at 48M**. Only four survive to 48M, and six new ones appear that were
+unknown in both arms at 12M. The set churns; it is not a set of deals with a
+property.
+
+**And none of it is evidence about winnability, by construction.** Every
+disagreement is restricted `unknown` against full `solvable` — never restricted
+`unsolvable`. A deal the restricted arm ran out of budget on says nothing about
+whether it can be won without worry-back. **To prove a delta you need a deal that
+is restricted-`unsolvable` and full-`solvable`, and Gypsy has proved nothing
+unsolvable at thirteen ranks at all.** At rank cap 4, where 23 refutations do
+exist, both arms agreed on every one of them.
+
+**So the honest statement of the project's second question today is: the measured
+worry-back delta is zero, with an upper bound of 1.0% that is falling as the
+search improves.** That is a finding, and it is not the one `DESIGN.md` was
+written expecting. It should not be dressed up as one until a Gypsy refutation
+exists to test it against.
+
+### The fix is confirmed on Gypsy, and that item is closed
+
+Run 1 re-solved seeds 0–49 at 12M restart-8 against the recorded baseline:
+**zero verdicts contradicted and zero verdicts changed**, 44/0/6 restricted and
+45/0/5 full, exactly as recorded. This is the 12M re-measure owed since
+2026-09-17, when it was abandoned locally for wall clock. Safe autoplay's
+corrected form costs Gypsy nothing at a budget that resolves.
+
+### The curve, and the constraint that is not memory
+
+The restricted arm goes 23.2% to 12.5% over a fourfold step: a multiplier of
+**0.539**, steeper than Klondike's 0.644. Two points only, and the restart count
+moved from 8 to 32 with the budget, so this is a step on the tuned
+configurations rather than a pure budget curve. Treat it as provisional.
+
+On that slope, 1% unknown is about **1.4x10^10 nodes a deal**, four fourfold
+steps past 48M.
+
+**There is no memory wall here, and that is the important difference from
+Klondike.** Each restart is a fresh `solve` with its own table, so the table is
+sized by the 1.5M slice and not by the total: occupancy was **8.94% at both
+budgets** and would stay there at any budget. Klondike's 1% threshold wanted 124
+GiB a worker; Gypsy's wants 256 MiB.
+
+That leaves time alone. The 48M run cost **3h07m** of wall clock on four
+workers. Scaling the unknown-dominated part by roughly 4 x 0.539 per step puts
+four more steps at something like **three days on this box** — long, but neither
+impossible nor a hardware question.
+
+**Before committing to that, pin the slope.** Two points gave Klondike a slope
+that was wrong by a wide margin, and the third and fourth points are what made
+it trustworthy. A 192M / restart-128 point costs about half a day and decides
+whether the three-day run is worth starting.
+
+---
+
+## 2026-09-19 — `branching` measures the first descent, not where the budget goes
+
+**Status:** firm (a measurement, and a correction to a reading made the same
+day). The split-run rule is unchanged and unchallenged.
+
+Asked where Gypsy's branching factor now goes, `cargo run --bin branching`
+returned: **61% of moves in the full arm and 72% in the restricted arm are
+partial-run moves whose exposed card is dead** — exactly what the split-run rule
+cuts — while positions with an exhausted stock are **0.18–0.24%** and positions
+satisfying *both* of the rule's gates are **0.00%**.
+
+Read as a share of the search, that says the rule almost never fires. **It is
+not a share of the search, and the conclusion was wrong.**
+
+**Measured directly instead**, by deleting `splits_a_run_for_nothing` and
+re-solving seeds 0–49 at 12M restart-8, both arms, against the recorded run:
+
+| Arm | with the rule | rule deleted |
+|---|---|---|
+| restricted | 44 solvable, 6 unknown | **38 solvable, 12 unknown** |
+| full | 45 solvable, 5 unknown | **40 solvable, 10 unknown** |
+| nodes | 2.262x10^8 | **4.070x10^8 (+79.9%)** |
+
+**Eleven verdicts and eighty per cent of the nodes.** Every difference is
+`solvable` becoming `unknown`, never the reverse. The rule is one of the most
+valuable things in the solver, and the 0-of-50 to 29-of-50 improvement recorded
+when it shipped is entirely credible.
+
+**Why the tool says otherwise.** It samples along the search's *first descent* —
+ten seeds, fifty thousand steps — and stock moves sort last in the ordering, so
+a descent defers pressing the stock and seldom reaches an empty-stock position.
+The search as a whole plainly reaches them in quantity. The tool measures the
+shape of the descent, which is what it was written for and what its own doc
+comment says; it does not measure where the budget is spent.
+
+**So its percentages are first-descent percentages**, including the 42% figure
+recorded when the incomplete-pile rule was sized on 2026-09-16. They are fine
+for what they were used for — spotting that a class of move is large enough to
+be worth a rule — and must not be quoted as the share of the search a rule cuts.
+**The way to measure that is to delete the rule and re-run**, which costs one
+batch run and answers the question directly.
+
+**Nothing here argues against widening the gates.** The 61–72% removable figure
+is still real in the region sampled, and Gate 1 still blocks the rule wherever
+the stock is live. What is gone is the evidence that the gates make the rule
+useless — they plainly do not.
+
+### Also probed: can a full-size Gypsy deal be exhausted at all?
+
+Seed 12, restricted arm, **300M contiguous nodes** and no restarts, which is the
+only shape that can produce a refutation: **`unknown`, stopped on the budget.**
+No sign of approaching exhaustion.
+
+Seeds 23 and 32 did the same. All three were oversubscribed, though — a 2,048
+MiB table holds 1.34x10^8 entries against 3x10^8 nodes expanded — so the run was
+repeated at a budget the table can hold. **Seed 12, 100M nodes, 2,048 MiB: still
+`unknown`, and `table_filled` 89,586,032, so 89.6% of expansions were finding
+positions never seen before**, at 66.7% occupancy.
+
+**The frontier is not closing.** A hundred million nodes into that deal the
+search is still almost entirely on new ground, so the reachable game is far
+larger than anything on this budget curve and exhaustion is nowhere in sight.
+
+**What it does not show is that Gypsy refutations are unreachable**, and the
+selection is the reason. These three seeds were picked because they are the
+*hardest* — unresolved at 48M with 32 restarts. They are large deals, and a
+large deal is exactly the one that cannot be exhausted whether it is winnable or
+not. A refutation, if the game has any, comes from an **unwinnable and small**
+deal, and nothing in this probe looks for one.
+
+**The run that would look for one has never been done.** Every thousand-deal
+Gypsy run used restarts, and a 1.5M slice cannot exhaust a game, so none of them
+could return `unsolvable` at all. Contiguous-budget Gypsy runs exist only at
+fifty deals. **A thousand deals with `--restarts 1` at a contiguous budget is
+the cheapest way to find out whether this game has a reachable refutation** — it
+resolves fewer deals than the restart configuration, which is the point: it is
+the only configuration that can prove one.
+
+**Worth stating plainly regardless: every thousand-deal Gypsy run so far used
+restarts, and a restart slice of 1.5M nodes cannot exhaust a full-size game. No
+Gypsy run this project has ever done was capable of returning `unsolvable`.**
+The absence of refutations is not yet evidence that they are hard.
+
+---
+
+## 2026-09-20 — Seed 188: the first full-size Gypsy refutation, and the verification criterion that nearly threw it away
+
+**Status:** firm. Run 1 of the contiguous hunt, by Gizmo at `2d72ec5`; report at
+`docs/reports/gypsy-refutation-hunt-run1-20260920T032623Z.md`. The verification
+below was run here.
+
+**Seed 188 cannot be won.** It is exhausted, with no limit touched, in both
+arms:
+
+| Configuration | Arm | Verdict | Nodes |
+|---|---|---|---:|
+| all dominances | restricted | `unsolvable` | 4,203,474 |
+| safe-foundation forcing removed | restricted | `unsolvable` | 4,203,474 |
+| split-run filter removed | restricted | `unsolvable` | 4,671,078 |
+| **safe autoplay removed** | restricted | **`unsolvable`** | **226,504,270** |
+| all dominances | **full** | **`unsolvable`** | **19,801,449** |
+| **every dominance removed** | **full** | **`unsolvable`** | **1,076,602,384** |
+
+Every rule removed in turn leaves the verdict standing, and the **full** arm
+reaches it independently — worry-back does not save this deal either. The last
+row is the one that settles it: **with all three rules gone the raw rules alone
+exhaust the game and agree**, so the refutation inherits nothing from any
+dominance or any proof behind one.
+
+That run filled its table completely — 536,619,615 of 536,870,912 entries — and
+it does not matter. Losing a table entry costs a re-expansion and never a
+verdict, which is the property `table.rs` was built around: a displaced position
+is explored again rather than skipped. A full table can stop a search
+*finishing*; it cannot make a search that did finish wrong. This one finished
+without touching a limit.
+
+**The full arm's own dominances are worth the same 54x as safe autoplay is to
+the restricted arm** — 19.8M nodes against 1.08 billion.
+
+**This is the first thing the project has ever proved about Gypsy in the losing
+direction.** Until today every Gypsy verdict was `solvable` or `unknown`, the
+answer could only be "at least X% winnable", and no dominance could be tested
+in the direction where a wrong one fails. **Gypsy's winnability is now known to
+be below 100%.** The bracket has two sides.
+
+**And refutations are cheap.** 4.2M nodes restricted, 19.8M full, both well
+inside budgets already run routinely. The fear recorded on 2026-09-19 — that
+exhaustion might be structurally out of reach at thirteen ranks, so that no
+amount of budget could ever close the unknown bucket — is answered for at least
+one deal. Jammed deals have small reachable games and the search finds the end
+of them.
+
+**Why the thousand-deal run nearly missed it.** The contiguous run gave each
+deal 12M. The restricted arm found the refutation at 4.2M, but the full arm
+needs 19.8M and came back `unknown` — four megabytes of budget short of proving
+the same deal twice.
+
+### The criterion was wrong, and it was ours
+
+The hunt prompt asked for any refutation to be re-solved with each dominance
+removed, and said: *"one that changes to `solvable` or `unknown` with a rule
+removed is that rule failing"*. **Including `unknown` was the error.**
+
+Removing a dominance makes the tree larger. A search that exhausts the smaller
+tree in 4.2M nodes need not exhaust the larger one in 12M — and with safe
+autoplay removed this one needs **226M**. Gizmo re-ran at 12M, got `unknown` at
+exactly 12,000,000 nodes, and followed the criterion as written to the
+conclusion that safe autoplay is unsound and the refutation invalid. Both
+conclusions were wrong, and the instruction produced them.
+
+**The correct criterion: only `unsolvable` becoming `solvable` shows a rule
+failing**, because that is the direction a discarded winning line surfaces in.
+`unsolvable` becoming `unknown` means the budget was too small for the bigger
+tree and the test is inconclusive until it is raised.
+
+**Safe autoplay is not merely exonerated, it is measured**: on this deal it is
+worth **54x**, 4.2M nodes against 226M. The rule whose shortcut was removed on
+2026-09-17 is doing more work than anything else in the restricted arm.
+
+**A near miss worth recording.** Had the criterion stood, the project would have
+discarded its first refutation and spent the next session hunting a bug in a
+sound and valuable rule — the exact inverse of the 2026-09-17 error, where a
+genuinely unsound rule went unnoticed. Both directions cost, and the deal set
+that catches one does not catch the other.
+
+### What seed 188 becomes
+
+**A regression fixture, and the only one of its kind.** It is the single Gypsy
+position at thirteen ranks where a future unsound dominance shows itself by
+turning `unsolvable` into `solvable`. The rank-4 set catches gross errors and
+missed a one-rank one; this catches anything that discards the winning lines of
+a deal that has none to discard.
+
+**Not a worry-back delta.** Seed 188 is unwinnable in both arms, so it says
+nothing about the project's second question. The measured delta stands at zero.
+
+**One deal is one deal.** A single refutation in a thousand says Gypsy is below
+100% and says nothing yet about where. The 48M half of the hunt was not run; it
+should be, now that the criterion is fixed and the first result is in hand.
+
+### Also measured
+
+Contiguous 12M over a thousand deals: **48.3% restricted unknown and 47.6%
+full**, against 23.2% and 21.1% at the same budget with eight restarts. That is
+the price of the only configuration that can refute anything, and it is steep.
+
+**A trap in the table flag**: `Table::with_entries` rounds up to a power of two,
+so `--table-mib 10240` asks the allocator for 16 GiB rather than 10. Pass powers
+of two.
+
+---
+
+## 2026-09-23 — Five refutations in five thousand deals, and the first bracket with two real sides
+
+**Status:** firm (a measurement). Run 2 by Gizmo at `2d72ec5`; report at
+`docs/reports/gypsy-refutation-hunt-run2-20260923T181048Z.md`, results at
+`docs/results/gypsy-both-12M-seeds1000-4999-contiguous.jsonl`. Seeds 1000–4999,
+contiguous 12M, both arms, identical to Run 1 in every other parameter.
+
+The seed-188 canary passed on a rebuilt `main` before the run: `unsolvable`,
+4,203,474 nodes, to the node.
+
+| Sample | arm | solvable | unsolvable | unknown |
+|---|---|---:|---:|---:|
+| Run 2, 4,000 deals | restricted | 2,098 | **4** | 1,898 (47.45%) |
+| Run 2 | full | 2,123 | **2** | 1,875 (46.88%) |
+| **combined 5,000** | restricted | 2,614 | **5 (0.10%)** | 2,381 |
+| **combined 5,000** | full | 2,647 | **2 (0.04%)** | 2,351 |
+
+**The population is stable.** Run 2's unknown fractions land within a point of
+Run 1's 48.3% and 47.6% on four thousand fresh seeds, which is the first
+evidence in this project that a Gypsy sample behaves like the one before it.
+
+### What the refutations cost, and why that matters
+
+| Seed | arm | nodes to exhaust |
+|---:|---|---:|
+| 4617 | restricted | **3,202** |
+| 3796 | restricted | 2,283,094 |
+| 188 | restricted | 4,203,474 |
+| 4260 | restricted | 5,692,561 |
+| 3966 | restricted | 7,713,489 |
+| 4617 | full | 3,211 |
+| 3796 | full | 8,967,671 |
+
+**Every one lands under 9M against a 12M budget**, and seed 4617 jams so early
+it exhausts in 3,202 nodes. That is the shape predicted when Run 2 was chosen
+over a budget increase: unwinnable deals have small reachable games, and the
+budget is not what limits how many are found.
+
+**The corollary is a warning.** A budget that catches everything under 9M says
+nothing about deals needing 20M, and the full arm shows the effect directly —
+it found two refutations where the restricted arm found four, because its trees
+are larger. Seed 188's full arm needs 19.8M and came back `unknown` here.
+**The full arm's 0.04% is a floor, not an estimate.**
+
+### The bracket now has two sides
+
+Merging what is proved for seeds 0–999 across configurations — the 48M
+restart-32 run resolved 875 of 1,000 winnable, and the contiguous run proved
+seed 188 unwinnable, a deal that sits in the restart run's unknown list —
+
+**Gypsy's thoughtful winnability is between 87.5% and 99.9%.**
+
+Wide, and it is the first statement this project can make that is bounded above
+as well as below. Everything before today was "at least X%".
+
+### The worry-back delta: still zero, and now down to two open deals
+
+Across five thousand deals the arms disagree in one direction only: 33 deals
+where the restricted arm ran out of budget and the full arm found a win. **No
+deal is restricted-`unsolvable` and full-`solvable`**, which remains the only
+pair that would prove worry-back changes winnability.
+
+Three deals were restricted-`unsolvable` with the full arm `unknown` — the only
+candidates that could exist. **All three are now settled, and all three are
+`unsolvable` with worry-back legal too:**
+
+| Seed | restricted | full | ratio |
+|---:|---:|---:|---:|
+| 4617 | 3,202 | 3,211 | 1.0x |
+| 3796 | 2,283,094 | 8,967,671 | 3.9x |
+| 188 | 4,203,474 | 19,801,449 | 4.7x |
+| 4260 | 5,692,561 | 13,997,443 | 2.5x |
+| 3966 | 7,713,489 | 48,274,857 | 6.3x |
+
+**Every deal that cannot be won without worry-back cannot be won with it
+either.** The worry-back delta is **zero on every deal where the question is
+decidable**, and there are no candidates left in five thousand deals.
+
+That also corrects the full arm's rate: its 0.04% was entirely an artifact of
+the 12M cap, and **both arms refute the same five deals, 0.10%**. The
+genuinely-unwinnable rate is 5 in 5,000, not a range.
+
+**And it prices worry-back**: exhausting a refutation with worry-back legal
+costs 1.0x to 6.3x the restricted arm, so the larger move set roughly
+quadruples the work without changing a single verdict.
+
+**`DESIGN.md` calls the worry-back delta the headline finding. On the evidence
+it is a null result** — not "too small to measure" but zero wherever the
+question can be put, across two deal sets (five thousand at thirteen ranks, and
+every refutation at rank cap 4) and every measurement this project has made.
+That is worth reporting as a finding in its own right rather than as a
+disappointment, and it should be stated plainly in the writeup.
+
+### The verification behaved, and one check is owed
+
+Every Run 2 refutation was re-checked with each dominance removed, and this time
+`unknown` results were **escalated rather than called failures** — the corrected
+criterion doing its job. Nothing failed.
+
+One gap, since closed. Seed 3796's **full-arm** safe-foundation removal stayed
+`unknown` through 96M on fritter.lol, which could not allocate a larger table.
+Finished here the same day: **`unsolvable` in 1,164,085,585 nodes**, no limit
+touched. It needed **130x** the 8,967,671 of the baseline, so Gizmo's 96M
+attempt stopped at eight per cent of the way — a textbook case of the corrected
+criterion, where the honest reading of an `unknown` is "not enough budget".
+
+**All five refutations are now verified against every dominance**, and that 130x
+is the largest such multiplier measured: safe-foundation forcing is worth more
+to the full arm on this deal than safe autoplay's 54x is to the restricted arm
+on seed 188.
+
+---
+
+## 2026-09-23 — Correction: the winnability bracket was a sample bracket quoted as a population claim
+
+**Status:** firm. Corrects *Five refutations in five thousand deals, and the
+first bracket with two real sides* (earlier today), whose headline sentence —
+"Gypsy's thoughtful winnability is between 87.5% and 99.9%" — is wrong as
+written. The measurements it rests on are unchanged; the inference from them was
+not sound.
+
+**What went wrong.** 875 solvable and 1 unsolvable of 1,000 gives a bracket on
+*those thousand deals*. Quoting it as Gypsy's winnability treats a sample as the
+population, with no allowance for sampling error. `analysis/klondike_validation.py`
+has always been careful to print both lines — "in this sample" and "allowing for
+sampling error, 95%" — and the Gypsy claim skipped the second.
+
+**Also understated.** Merging every run on seeds 0–999 rather than reading the
+48M restart run alone: the contiguous run resolves three deals that run left
+unknown, so the merged sample is **878 solvable, 1 unsolvable, 121 unknown**.
+
+| | |
+|---|---|
+| sample bracket, merged seeds 0–999 | 87.8% – 99.9% |
+| **population, Wilson 95%** | **85.6% – 99.96%** |
+
+**The lower bound survives. The upper bound does not.** "At most 99.96%" is
+barely a statement: five refutations in five thousand deals constrain the
+population's unwinnable rate from below only weakly — Wilson puts it at
+**≥0.043%**. The 99.9% figure carried no sampling allowance at all.
+
+**The two ends come from different samples and that is deliberate.** The lower
+bound uses the thousand seeds that got the strongest search (48M with restarts);
+the upper uses all five thousand contiguous deals, because constraining a rare
+event needs deals rather than depth. Each is a valid one-sided claim about the
+same population. Quoting them as one interval is loose and should be labelled
+whenever it is done.
+
+**What can honestly be said today: at least about 85% of Gypsy deals are
+winnable, and at least a few per thousand are not.** The upper bound is not yet
+worth quoting.
+
+### The assumption underneath every interval here
+
+Wilson assumes an i.i.d. sample. Ours is SplitMix64 shuffles of sequential
+seeds, and **nobody has tested that this gives an unbiased sample of deals** —
+`DESIGN.md` carries it as an open question. Every confidence interval in this
+project, Klondike's included, rests on it.
+
+The indirect evidence is good: Klondike's measured rate brackets the published
+81.945% at 3M, 12M, 48M and 64M and across 50- and 1,000-deal samples, which a
+badly non-uniform shuffle would be likely to break. That is inference from a
+validation designed for something else, not a test of the shuffle. A direct
+check — the distribution of some cheap per-deal statistic against its
+combinatorial expectation — is cheap and has never been run.
+
+**Rule from here: a winnability number is quoted with its sampling allowance and
+its sample size, or it is not quoted.**

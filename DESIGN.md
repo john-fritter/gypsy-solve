@@ -48,9 +48,24 @@ differ; **any published number is meaningless without this ruleset attached.**
    can't move until legally exposed. This is the standard measure in the
    literature and the upper bound on real play.
 2. **The worry-back delta.** Solve every deal twice — worry-back disabled, then
-   enabled — and report the difference in percentage points. This is the
-   headline finding and it doubles as a staged build: the no-worry-back solver
-   is much easier and ships first.
+   enabled — and report the difference in percentage points. This doubles as a
+   staged build: the no-worry-back solver is much easier and ships first.
+
+   **Settled 2026-09-23: the delta is zero, and not merely unmeasured.** All
+   five deals proved unwinnable without worry-back across five thousand are
+   also proved unwinnable *with* it — 4617, 3796, 188, 4260, 3966 — so there is
+   no deal anywhere in the sample that worry-back rescues, and no candidate
+   left. Worry-back costs 1.0x to 6.3x the nodes to exhaust and changes no
+   verdict. Earlier, on a thousand deals: The two arms disagree on 2.1% of deals at 12M and 1.0%
+   at 48M, and every disagreement is restricted `unknown` against full
+   `solvable` — never restricted `unsolvable`. Seventeen of the 21 at 12M were
+   resolved by the restricted arm itself at 48M, so the set is a search artifact
+   that budget erodes rather than a set of deals needing worry-back. **A real
+   delta needs a deal proved unsolvable without worry-back and winnable with
+   it, and Gypsy has proved nothing unsolvable at thirteen ranks.** At rank cap
+   4, where 23 refutations exist, both arms agree on all of them. This was
+   written as the headline finding; on the evidence so far it may be a null
+   result, which is worth reporting honestly rather than dressing up.
 
 Possible phase two: real-play winnability with hidden information
 (determinization / MCTS). Note that the stock deals 8 at a time, blind and
@@ -468,12 +483,77 @@ rather than re-deriving:
   narrow but it is the only check in the failing direction that is actually
   about this game. It found a false refutation in **safe autoplay** the day it
   existed, so that rule is under dispute and is the next thing to settle.
+- **Verifying a refutation is not the same test, and the difference cost a day.**
+  Re-solve the refuted seed with each dominance removed in turn. Only
+  `unsolvable` becoming **`solvable`** shows a rule failing — that is where a
+  discarded winning line surfaces. `unsolvable` becoming **`unknown`** is
+  inconclusive, not a failure: removing a dominance enlarges the tree, and the
+  search that exhausted the small one may not exhaust the large one on the same
+  budget. Raise the budget until it decides. Expect to need one to two orders of
+  magnitude more — removing safe autoplay took seed 188 from 4.2M nodes to 226M.
+  A criterion that counted `unknown` as failure was written into a Gizmo prompt
+  on 2026-09-19 and came back having declared a sound rule broken and the
+  project's first refutation void.
 - Re-run the arm you did *not* change and diff it against the recorded run in
   `docs/results/`. Threading an option through `legal_actions` touches every
   caller, and "the other arm is untouched" is worth checking rather than
   assuming.
 - Keep both result files in `docs/results/` as `<game>-<arm>-<budget>-<n>deals
   -{baseline,<rule>}.jsonl`, and append the decision entry with the table.
+
+### Where Gypsy actually stands, measured 2026-09-19
+
+The first thousand-deal survey, both arms, 256 MiB tables:
+
+| Budget | restricted unknown | full unknown |
+|---:|---:|---:|
+| 12M as 8 x 1.5M | 23.2% | 21.1% |
+| 48M as 32 x 1.5M | **12.5%** | **11.5%** |
+
+No deal was proved unsolvable in those runs, **and they could not have been**:
+restarts slice the budget and nothing full-size exhausts in 1.5M nodes. The
+contiguous runs that followed proved five (below). The fifty-deal set was also
+flattering: it gives 12.0% and 8.0% where the population gives 23.2% and 12.5%.
+On Klondike the same small sample was twice as *hard* as its population, so the
+rule is that fifty deals are unreliable in an unpredictable direction, not that
+they are pessimistic.
+
+The step is a multiplier of **0.539**, steeper than Klondike's 0.644, and it is
+two points with the restart count moving alongside the budget — provisional. On
+that slope 1% unknown is about 1.4x10^10 nodes a deal, four fourfold steps past
+48M.
+
+**Gypsy has no memory wall.** Each restart is a fresh search with its own table,
+so the table is sized by the 1.5M slice rather than the total budget: occupancy
+was 8.94% at both budgets and stays there at any budget. Where Klondike's 1%
+threshold wanted 124 GiB a worker, Gypsy's wants 256 MiB. Time is the only
+constraint, and four more fourfold steps is on the order of three days on this
+box rather than a hardware question.
+
+Pin the slope before spending that. A 192M / restart-128 point costs about half
+a day, and two points are exactly what got the Klondike slope wrong.
+
+### The bracket, as of 2026-09-23
+
+Contiguous runs over 5,000 deals proved **five** deals unwinnable — seeds 188,
+3796, 3966, 4260, 4617 — every one of them in **both** arms. Merging every run
+on seeds 0–999 gives 878 solvable, 1 unsolvable, 121 unknown.
+
+| | |
+|---|---|
+| sample bracket, seeds 0–999 | 87.8% – 99.9% |
+| **population, Wilson 95%** | **85.6% – 99.96%** |
+
+**Quote the second line, never the first alone**, and say which sample it came
+from: the lower bound is the thousand deals that got the strongest search, the
+upper is all five thousand contiguous, because constraining a rare event needs
+deals rather than depth. The upper bound is close to vacuous — five refutations
+put the population's unwinnable rate at only ≥0.043% with 95% confidence.
+
+**What is honestly claimable: at least about 85% winnable, and at least a few
+per thousand not.** Narrowing it is the unknown bucket's job, and the unknown
+bucket is 12% on the best-resolved thousand against the 1% the ±0.5% figure
+needs.
 
 ### The Gypsy batch: the gate is cleared
 
