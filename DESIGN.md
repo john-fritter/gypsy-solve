@@ -508,7 +508,12 @@ The first thousand-deal survey, both arms, 256 MiB tables:
 | Budget | restricted unknown | full unknown |
 |---:|---:|---:|
 | 12M as 8 x 1.5M | 23.2% | 21.1% |
-| 48M as 32 x 1.5M | **12.5%** | **11.5%** |
+| 48M as 32 x 1.5M | 12.5% | 11.5% |
+| 192M as 128 x 1.5M | **9.3%** | **8.2%** |
+
+The 192M point (2026-09-24) re-solved only the 48M unknowns. That gives the
+same result as re-solving everything, because restarts 1–32 replay the 48M run
+node for node.
 
 No deal was proved unsolvable in those runs, **and they could not have been**:
 restarts slice the budget and nothing full-size exhausts in 1.5M nodes. The
@@ -518,31 +523,41 @@ On Klondike the same small sample was twice as *hard* as its population, so the
 rule is that fifty deals are unreliable in an unpredictable direction, not that
 they are pessimistic.
 
-The step is a multiplier of **0.539**, steeper than Klondike's 0.644, and it is
-two points with the restart count moving alongside the budget — provisional. On
-that slope 1% unknown is about 1.4x10^10 nodes a deal, four fourfold steps past
-48M.
+**The slope flattened, measured 2026-09-24.** The multiplier per fourfold step
+went from 0.539 to **0.744** (restricted) and 0.545 to **0.713** (full). The
+chance that one more restart solves a deal still unknown fell from about 2.5%
+over restarts 9–32 to about 0.45% over restarts 33–80, then to under 0.2% over
+restarts 81–128, where only two deals were solved. A restart count that grows
+without limit does not reach 1% unknown on any budget worth running. The
+1.4x10^10-node projection that stood here came from the first two points only,
+and it is withdrawn.
 
 **Gypsy has no memory wall.** Each restart is a fresh search with its own table,
 so the table is sized by the 1.5M slice rather than the total budget: occupancy
 was 8.94% at both budgets and stays there at any budget. Where Klondike's 1%
-threshold wanted 124 GiB a worker, Gypsy's wants 256 MiB. Time is the only
-constraint, and four more fourfold steps is on the order of three days on this
-box rather than a hardware question.
+threshold wanted 124 GiB a worker, Gypsy's wants 256 MiB. That still holds.
+What does not hold is the conclusion drawn from it: more restarts of the same
+size have stopped paying. The 93 deals left are ones where a 1.5M-node search
+almost never finds a win. That includes every unwinnable deal, and restarts
+can never prove one of those.
 
-Pin the slope before spending that. A 192M / restart-128 point costs about half
-a day, and two points are exactly what got the Klondike slope wrong.
-
-### The bracket, as of 2026-09-23
+### The bracket, as of 2026-09-24
 
 Contiguous runs over 5,000 deals proved **five** deals unwinnable — seeds 188,
-3796, 3966, 4260, 4617 — every one of them in **both** arms. Merging every run
-on seeds 0–999 gives 878 solvable, 1 unsolvable, 121 unknown.
+3796, 3966, 4260, 4617 — every one of them in **both** arms. On seeds 0–999 the
+full game, which is the ruleset under study, has **918 solvable** at 192M, 1
+unsolvable (seed 188, from the contiguous run) and 81 unknown. The 2026-09-23
+figure of 878 counted restricted-arm wins only, which is conservative but
+below what the full arm had already proved.
 
 | | |
 |---|---|
-| sample bracket, seeds 0–999 | 87.8% – 99.9% |
-| **population, Wilson 95%** | **85.6% – 99.96%** |
+| sample bracket, seeds 0–999 | 91.8% – 99.9% |
+| **population, Wilson 95%** | **89.9% – 99.96%** |
+
+The solvable count is a floor. The contiguous 12M run solved three deals that
+the 48M run left unknown, and some of those may be among the 81, which would
+raise it by at most three.
 
 **Quote the second line, never the first alone**, and say which sample it came
 from: the lower bound is the thousand deals that got the strongest search, the
@@ -550,10 +565,10 @@ upper is all five thousand contiguous, because constraining a rare event needs
 deals rather than depth. The upper bound is close to vacuous — five refutations
 put the population's unwinnable rate at only ≥0.043% with 95% confidence.
 
-**What is honestly claimable: at least about 85% winnable, and at least a few
-per thousand not.** Narrowing it is the unknown bucket's job, and the unknown
-bucket is 12% on the best-resolved thousand against the 1% the ±0.5% figure
-needs.
+**What is honestly claimable: at least about 90% winnable, and at least a few
+per thousand not.** Narrowing it is the unknown bucket's job. That bucket is
+8.2% on the best-resolved thousand, against the 1% the ±0.5% figure needs, and
+more restarts no longer shrink it at a useful rate.
 
 ### The Gypsy batch: the gate is cleared
 

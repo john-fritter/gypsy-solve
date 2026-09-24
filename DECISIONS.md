@@ -3481,3 +3481,75 @@ It is not cheap, though. The unknowns were already most of the survey's cost,
 so expect about twelve hours. If the multiplier holds near 0.54, 1% unknown is
 a matter of compute. If it levels off, the residue is deals that restarts
 can't settle, and a dominance becomes the only route again.
+
+---
+
+## 2026-09-24 — The third point: the budget curve flattens, and restarts are running out
+
+**Status:** firm (a measurement). This run was requested in
+`docs/prompts/gypsy-192M-slope-pin.md`. Gizmo ran it at `2d72ec5`; the report
+is `docs/reports/gypsy-slope-pin-20260924T091957Z.md` and the results file is
+`gypsy-both-192M-restart128-48Munknowns.jsonl` (in Gizmo's workspace). It covers
+the 125 restricted-arm unknowns from the 48M / restart-32 survey, at 192M /
+restart-128, 256 MiB table, both arms.
+
+**The exactness canary passed.** Seeds 268, 330 and 562 were solved at 48M on
+restart 31, and at 192M / 128 they came back with the same verdict, node count
+and restart. So restarts 1–32 do replay the 48M run, and re-solving only the
+unknowns is exact. Both sets of deals still unknown are subsets of the 48M
+sets, as they must be.
+
+| Arm | unknown at 12M / r8 | 48M / r32 | 192M / r128 | multiplier, last step |
+|---|---:|---:|---:|---:|
+| restricted | 232 | 125 | **93** | 0.539 → **0.744** |
+| full | 211 | 115 | **82** | 0.545 → **0.713** |
+
+**The slope flattened.** The chance that one more restart solves a deal still
+unknown, restricted arm:
+
+| restarts | deals solved | chance per restart |
+|---|---:|---:|
+| 9–32 | 107 of 232 | ~2.5% |
+| 33–48 | 9 | 0.45% |
+| 49–64 | 8 | 0.43% |
+| 65–80 | 8 | 0.46% |
+| 81–96 | 5 | 0.31% |
+| 97–128 | 2 | 0.07% |
+
+The deals that a 1.5M search solves by luck have been solved, and what is left
+almost never gets that luck. **More restarts of this size will not reach 1%
+unknown at any budget worth running.** This withdraws the "four more fourfold
+steps, about three days" projection in `DESIGN.md`, which rested on the first
+two points only.
+
+**The winnability lower bound moves anyway.** The full game has 918 solvable of
+1,000, so Wilson 95% gives **≥89.9%**. The previous figure was ≥85.6%, but it
+counted the restricted arm's 878 wins when the full arm had already proved
+888. Using the restricted count was conservative, not wrong; the full-arm
+count is the right one for the ruleset under study. The upper bound is
+unchanged. `DESIGN.md` is corrected.
+
+**Worry-back delta: unchanged.** Four more deals are full-`solvable` and
+restricted-`unknown` (270, 376, 928, 934). None is restricted-`unsolvable`, so
+none says anything about the delta.
+
+**It took 6h35m wall clock**, against the prompt's twelve-hour estimate.
+
+### What the residue is, and what that means for the route
+
+There are 93 deals (82 in the full game) on which a 1.5M-node search almost
+never finds a win. That set holds every unwinnable deal among the thousand,
+since restarts cannot prove any deal unwinnable, and winnable deals whose wins
+need a longer single descent. The two call for different tools:
+
+- **Winnable but deep:** a bigger slice, or a better move ordering. Ordering is
+  free, because it discards nothing and needs no proof.
+- **Unwinnable:** only exhaustion, which means pruning, which means a
+  dominance. That points back to the lagging-pile safe test sized earlier
+  today: at most 0–32% of forced nodes, and a proof nobody has written.
+
+Which tool is right depends on the mix, and nothing measured so far gives it.
+The cheapest way to find out needs no code: the same 93 deals at the same 192M,
+as 32 x 6M. If the bigger slice solves many of them, the residue is mostly
+winnable and deep. If it solves few, the residue is mostly jammed. This is
+**provisional**, and it is John's call.
