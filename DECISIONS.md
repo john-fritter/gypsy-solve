@@ -3393,3 +3393,91 @@ combinatorial expectation — is cheap and has never been run.
 
 **Rule from here: a winnability number is quoted with its sampling allowance and
 its sample size, or it is not quoted.**
+
+---
+
+## 2026-09-24 — The strong split-run rule is licensed and worthless, and the budget goes where no rule reaches
+
+**Status:** firm (a measurement and a rejection). No solver change. Measured
+with throwaway tools against `9a2ddc8`. Their source was not kept, because
+each is a wrapper around `Gypsy::legal_actions` that can be rebuilt in a few
+minutes from the description below.
+
+### Where the budget goes
+
+This was measured over the **whole search**, not the first descent: every
+expansion counted, on seeds 12, 23, 32 and 37 (the hardest of the fifty-deal
+set). Restricted arm, 12M contiguous, 1,024 MiB table, all four `unknown`.
+
+| | seed 12 | 23 | 32 | 37 |
+|---|---:|---:|---:|---:|
+| expansions with the stock empty | 97.0% | 96.1% | 95.3% | 97.8% |
+| of those, a forced play | 0.0% | 4.0% | 0.0% | 2.3% |
+| moves per expansion, stock empty | 2.88 | 2.53 | 2.23 | 2.86 |
+| foundation plays among those moves | 30.1% | 30.8% | 33.9% | 19.9% |
+
+Positions with an empty column make up at most 0.1% of expansions. Sampled
+positions from deep in seed 12's search have 19–25 of 104 cards up, and one
+foundation pile of every suit is at its ace or empty. **So the search spends
+its budget in a crowded endgame where no safe-play rule can fire.** The
+two-deck test needs all four opposite-colour piles to have passed rank *r−1*,
+and with the second pile of each suit stuck at the ace, nothing above a two
+ever passes.
+
+### Tried: split only when the exposed card goes up next
+
+This is the stronger form of Theorem 4, which the 2026-09-16 gate proof said it
+did not establish. **It does establish it.** The proof works for any gated
+split, not just one that exposes a dead card: the move it defers is exactly a
+split followed at once by the exposed card's foundation play, and a mirrored
+move keeps its cut status under the stronger definition too. So the rewrite
+still has one fewer cut move each time, and the induction still ends. It was
+implemented as a fused action (the split plus the foundation play) so that it
+stays a function of the position.
+
+| Test | Result |
+|---|---|
+| 20,000 rank-4 deals, restricted | verdicts identical; nodes −0.008% |
+| refutations 188, 3796, 3966, 4617 | identical to the node |
+| refutation 4260 | −254 of 5,692,561 |
+| seeds 12, 23, 32, 37 at 12M | still `unknown` |
+
+**Rejected: the stronger form is sound and has no effect.** Once the stock is
+empty, splits that expose a *playable* card are rare. The tableau moves the
+search actually makes (66–79% of its moves) carry whole runs off cards they
+don't build on. No split rule touches those moves. Don't build it.
+
+### A gap in the 2026-09-16 write-up, not in the rule
+
+The proof handles the case where the slot card `x` is played up first. It
+doesn't mention its twin `d` going up first. That case closes the same way:
+the real line's `d` is bare, so the copy's `x` is bare and `d` holds the other
+pile. The copy lifts that pile onto `x` and plays `d`, which is one inserted
+move, not cut, and the lines are identical after it. Recorded so that the next
+reader doesn't mistake the omission for a hole.
+
+### The one rule left aimed at those nodes, sized and not built
+
+That rule would be a safe-play test that tolerates one foundation pile per suit
+lagging behind. To size it, a deliberately **unsound** version of the test was
+used, one that checks only the leading pile of each opposite-colour suit. It
+would force a move at **10.3%, 21.9%, 0.0% and 31.9%** of stock-empty
+expansions on the four seeds. That is real, but it is an unsound rule's
+ceiling. A sound version has to handle the second copies, which are exactly
+the cards the lagging pile still wants, and that is where Blake & Gent's proof
+stops. The proof would be hard and the payoff is uncertain, so it is deferred
+until the budget curve says it is needed.
+
+### Next: pin the budget slope first
+
+`docs/prompts/gypsy-192M-slope-pin.md` re-solves the 125 deals left unknown by
+the 48M / restart-32 survey, at 192M / restart-128, on the same 256 MiB table.
+The run is exact: `solve_restarting` slices the budget evenly and derives each
+restart's ordering from its index, so restarts 1–32 replay the 48M run node for
+node, and nothing that run resolved can come back unknown. The prompt makes
+Gizmo check this on three deals before starting.
+
+It is not cheap, though. The unknowns were already most of the survey's cost,
+so expect about twelve hours. If the multiplier holds near 0.54, 1% unknown is
+a matter of compute. If it levels off, the residue is deals that restarts
+can't settle, and a dominance becomes the only route again.
