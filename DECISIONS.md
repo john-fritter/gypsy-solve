@@ -3553,3 +3553,62 @@ The cheapest way to find out needs no code: the same 93 deals at the same 192M,
 as 32 x 6M. If the bigger slice solves many of them, the residue is mostly
 winnable and deep. If it solves few, the residue is mostly jammed. This is
 **provisional**, and it is John's call.
+
+---
+
+## 2026-09-25 — Deeper slices on the residue: about what more restarts would buy, and neither is a route
+
+**Status:** firm (a measurement). This run was requested in
+`docs/prompts/gypsy-residue-slice-test.md`. Gizmo ran it at `2d72ec5`; the
+report is `docs/reports/gypsy-residue-slice-test-20260925T040849Z.md` and the
+results file is `gypsy-both-192M-restart32-slice6M-residue93.jsonl`. It covers
+the 93 restricted unknowns at 192M as 32 x 6M, 256 MiB table, both arms. The
+canary passed: seed 188 restricted came back `unsolvable` on restart 1, in
+4,203,474 nodes, the same count as on a 1,024 MiB table.
+
+| Arm | input | solvable | unsolvable | unknown |
+|---|---:|---:|---:|---:|
+| restricted | 93 | **10** | 1 (seed 188) | 82 |
+| full, previous residue | 82 | **6** | 0 | **76** |
+
+Full-arm wins: five carried from restricted wins (56, 191, 193, 691, 692) and
+one found by the full search itself, seed 508. The report's list of remaining
+full-arm unknowns has 77 entries, not 76: it includes seed 270, which the
+192M / 128 run had already solved in the full arm. The correct list is the
+report's minus 270.
+
+### What the depth distribution does and does not show
+
+All ten restricted wins came more than 1.5M nodes into their slice: six
+between 1.5M and 3M, four after 3M, and one (seed 185) at 5.94M. **The empty
+≤1.5M band is guaranteed by how the run was set up, not a finding.** Restarts
+1–32 use the same orderings as the 1.5M run's restarts 1–32, and a search's
+first 1.5M nodes are the same whatever its budget. So any win within 1.5M
+would already have been found. The prompt called this "the measurement that
+matters most", and that was wrong in the same way the 2026-09-19 `branching`
+reading was: the number was fixed by the way it was measured. What the run
+does show is that these ten deals needed a *deeper* search under orderings
+that had failed at 1.5M.
+
+**The comparison that decides the question is yield per node, and it's a
+draw.** Continuing 1.5M restarts from 129 to 256 at the last observed rates
+(0.07% to 0.13% per restart per deal) would be expected to solve 8 to 14 of
+these 93. The 6M slices solved 10 for the same budget. So bigger slices are
+not a better use of nodes than more restarts, and neither changes the trend:
+each 192M spent on the residue solves about a tenth of it, and less each time.
+Getting from 75 unknown to the 10 that the ±0.5% figure allows would take
+around twenty more runs like this one, even if the rate stopped falling, and
+it hasn't.
+
+**Budget, spent as restarts or as depth, is no longer a route to the headline
+figure.** What's left is either a smarter search (a better move ordering,
+which is free to try because it discards nothing) or pruning (a dominance,
+which needs a proof). Which of the two depends on how much of the residue is
+unwinnable, and this run didn't settle that: it found ten deep wins and no new
+refutations.
+
+### The bound
+
+For the full game on seeds 0–999: **924 solvable, 1 unsolvable, 75 unknown**,
+which gives Wilson 95% **≥90.6%**. `DESIGN.md` is corrected. Worry-back delta:
+no deal is restricted-`unsolvable` and full-`solvable`, still.

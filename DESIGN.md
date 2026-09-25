@@ -541,22 +541,23 @@ size have stopped paying. The 93 deals left are ones where a 1.5M-node search
 almost never finds a win. That includes every unwinnable deal, and restarts
 can never prove one of those.
 
-### The bracket, as of 2026-09-24
+### The bracket, as of 2026-09-25
 
 Contiguous runs over 5,000 deals proved **five** deals unwinnable — seeds 188,
 3796, 3966, 4260, 4617 — every one of them in **both** arms. On seeds 0–999 the
-full game, which is the ruleset under study, has **918 solvable** at 192M, 1
-unsolvable (seed 188, from the contiguous run) and 81 unknown. The 2026-09-23
+full game, which is the ruleset under study, has **924 solvable**, 1
+unsolvable (seed 188) and 75 unknown, merging 192M as 128 x 1.5M with 192M as
+32 x 6M on the residue. The 2026-09-23
 figure of 878 counted restricted-arm wins only, which is conservative but
 below what the full arm had already proved.
 
 | | |
 |---|---|
-| sample bracket, seeds 0–999 | 91.8% – 99.9% |
-| **population, Wilson 95%** | **89.9% – 99.96%** |
+| sample bracket, seeds 0–999 | 92.4% – 99.9% |
+| **population, Wilson 95%** | **90.6% – 99.96%** |
 
 The solvable count is a floor. The contiguous 12M run solved three deals that
-the 48M run left unknown, and some of those may be among the 81, which would
+the 48M run left unknown, and some of those may be among the 75, which would
 raise it by at most three.
 
 **Quote the second line, never the first alone**, and say which sample it came
@@ -567,8 +568,8 @@ put the population's unwinnable rate at only ≥0.043% with 95% confidence.
 
 **What is honestly claimable: at least about 90% winnable, and at least a few
 per thousand not.** Narrowing it is the unknown bucket's job. That bucket is
-8.2% on the best-resolved thousand, against the 1% the ±0.5% figure needs, and
-more restarts no longer shrink it at a useful rate.
+7.5% on the best-resolved thousand, against the 1% the ±0.5% figure needs.
+Neither more restarts nor deeper ones shrink it at a useful rate (2026-09-25).
 
 ### The Gypsy batch: the gate is cleared
 
