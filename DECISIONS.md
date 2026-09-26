@@ -3612,3 +3612,103 @@ refutations.
 For the full game on seeds 0–999: **924 solvable, 1 unsolvable, 75 unknown**,
 which gives Wilson 95% **≥90.6%**. `DESIGN.md` is corrected. Worry-back delta:
 no deal is restricted-`unsolvable` and full-`solvable`, still.
+
+---
+
+## 2026-09-26 — A heuristic ordering changes which deals get lucky, not how many; the lagging-pile rule is false; the shipped forcing rules pass an independent audit
+
+**Status:** firm (measurements and a rejection). No solver change. Measured
+with throwaway tools at `9a2ddc8` source (the solver is unchanged since
+`2d72ec5`); each is described well enough below to rebuild.
+
+### Ordering: no gain
+
+This was the one lever left for the residue that needs no proof. Reordering
+discards nothing. The heuristic, *dig*, ranks each move by how deeply the
+cards the eight foundation piles need next are buried once the move is made,
+minus a weight per card on the foundations. Ties keep the salted order, so
+restarts still differ. Restricted arm, seeds 0–99, 12M as 8 x 1.5M, 256 MiB.
+The baseline reproduces the survey's 19 unknowns exactly.
+
+| Ordering | unknown | nodes | vs baseline |
+|---|---:|---:|---|
+| baseline | 19 | 393.4M | |
+| classes kept, *dig* within each | 22 | 354.3M | +5 / −8 |
+| *dig*, foundation weight 2 | 18 | 328.8M | +7 / −6 |
+| *dig*, foundation weight 4 | 18 | 334.1M | +7 / −6 |
+| *dig*, foundation weight 8 | 21 | 371.9M | +7 / −9 |
+
+Every variant solves several deals the baseline misses and loses several it
+solves. That churn, with no net gain, is what a *different* ordering does, not
+a *better* one. The residue confirms it: *dig* at weight 4 on 20 of the 82
+residue deals, at 24M as 16 x 1.5M, solved **0 of 20**. **Rejected.** A
+heuristic ordering is not the lever for the residue.
+
+### The lagging-pile rule: false, and found false in seconds
+
+The rule tested (R1): a card of rank *r* may be forced to its foundation when,
+in each opposite-colour suit, the *leading* pile has reached *r−1*. That is,
+it ignores the second copies. On 2026-09-24 an unsound version of this rule
+was sized at 0–32% of stock-empty nodes.
+
+**Method: a position-level check, not a deal-level one.** A forcing rule is
+sound exactly when every winnable position it fires in has a winnable forced
+child. On capped deals, positions are collected by random walks under the
+solver's own move set, 200 walks of up to 400 moves each and at most 20
+positions per deal. Walks reach tight and lost positions that the search's
+first descent never visits. Both the position and its forced child are then
+searched to the end.
+
+The first version sampled only positions the search itself expanded, and it
+found nothing. Every position it sampled was winnable, because the
+solver's first descent stays on winning ground. That is the same blind spot as
+the 2026-09-15 harness hole: a test that never sees a losing position cannot
+catch a rule that creates one.
+
+| Deck | positions checked | R1 counterexamples | R1 + bare-twin guard |
+|---|---:|---:|---:|
+| rank cap 4 | 79,962 | 15 (all rank 2) | 16 |
+| rank cap 5 | 79,850 | 16 (ranks 2, 3, 5) | 13 |
+| rank cap 6 | 79,292 | 74 (ranks 2–6) | 37 |
+
+The rate climbs with deck size, from 0.2 to 0.9 per thousand positions, so the
+full game is likely worse still. The bare-twin guard fires only when another
+bare card of the same rank and colour could stand in as the base. It halves
+the rate at cap 6 and removes nothing structurally.
+
+The failure is the one the rule was meant to paper over. Seed 3177 at cap 5
+forces 5♣ with both red suits' piles at 5 and at the ace, the exact lagging
+shape seen in full-size endgames. A second-copy red 4 still needs a black 5.
+
+The counterexamples above were confirmed by a search that itself used the
+shipped rules. Four more at cap 5 (2,000 deals) were confirmed with **a
+search that uses no pruning rule at all**, so they depend on no rule being
+sound. Seed 1395 at cap 5 is one: it forces 3♣ with the hearts and diamonds
+piles at 2 and empty.
+
+**Rejected.** Any sound lagging-pile rule needs a positional argument that the
+forced card is not the base some second copy must have. The obvious guard
+doesn't supply one. Nothing further is planned for it.
+
+### The shipped forcing rules, audited with a rule-free verifier
+
+The same hunter was pointed at the rules that ship: safe autoplay in the
+restricted arm and the two-deck safe-foundation rule in the full arm. Positions
+where the shipped rule fires were checked with the no-pruning search.
+Ordering it (foundation plays first, worry-backs last) was necessary for the
+full arm, where an unordered search decided 1 of 15 checks.
+
+| Arm, deck | positions checked | counterexamples | undecided |
+|---|---:|---:|---:|
+| restricted, cap 4 | 39,798 | **0** | 226 |
+| restricted, cap 5 | 39,367 | **0** | 700 |
+| full, cap 4 | 6,578 | **0** | 72 |
+| full, cap 5 | 2,514 | **0** | 73 |
+
+The full-arm rows are partial: the runs were cut at nine minutes, because a
+rule-free worry-back search is slow to finish. The deal-level checks this project
+used so far could only catch a rule that flips a *deal's* verdict. This checks
+the rule at every sampled position, and verifies without trusting any rule.
+It is the strongest soundness evidence either shipped rule has had. It is
+still evidence, not a proof. Undecided children are where a counterexample
+could still hide.
