@@ -293,6 +293,18 @@ budget-exhausted.
       proven-unsolvable deals and no verdict contradicted. The Gypsy full arm
       went from 0 of 50 resolved to 29, and solved its first deal by itself.
 
+   5. ~~*Split only when the exposed card goes up next.*~~ **Dead,
+      2026-09-24.** The 2026-09-16 proof already covers this stronger form of
+      Theorem 4, but it changes nothing: the refutation trees are identical
+      to the node. Once the stock is empty, splits that expose a playable card
+      are rare.
+   6. ~~*A lagging-pile safe test.*~~ **Dead, 2026-09-26.** Forcing a card
+      once each opposite-colour suit's *leading* pile has reached *r−1*,
+      ignoring the second copies, is false. `forcing_audit` finds
+      counterexamples at every rank cap tried, some confirmed with no
+      pruning rule trusted. It is kept in the tool as the control that must
+      keep failing.
+
    Every one of these is measured on the same Klondike deal set, and Klondike
    is a regression test with teeth: a dominance may change node counts and
    how many deals resolve, and must **not** change any verdict that was already
@@ -483,6 +495,18 @@ rather than re-deriving:
   narrow but it is the only check in the failing direction that is actually
   about this game. It found a false refutation in **safe autoplay** the day it
   existed, so that rule is under dispute and is the next thing to settle.
+- **A forcing rule is audited position by position before it ships**, with
+  `cargo run --release --bin forcing_audit` (added 2026-09-27). The tool takes
+  positions from random walks on capped deals, not from the search, because the
+  search's first descent stays on winning ground. At each position where the
+  rule fires, it solves the position and its forced child in the rules-legal
+  game with every pruning rule removed. A winnable position with a lost child
+  is a counterexample. The deal-level bar above only sees a rule that flips a
+  whole deal, and a first version that sampled the search passed a false
+  rule. Add the candidate as a `Rule` in the tool, and check that the
+  `lagging-pile` control still fails in the same run. A control that stops
+  failing means the audit has lost its teeth. Undecided checks are where a
+  counterexample could still hide, so a clean audit is evidence, not a proof.
 - **Verifying a refutation is not the same test, and the difference cost a day.**
   Re-solve the refuted seed with each dominance removed in turn. Only
   `unsolvable` becoming **`solvable`** shows a rule failing — that is where a

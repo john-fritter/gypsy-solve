@@ -3712,3 +3712,71 @@ the rule at every sampled position, and verifies without trusting any rule.
 It is the strongest soundness evidence either shipped rule has had. It is
 still evidence, not a proof. Undecided children are where a counterexample
 could still hide.
+
+---
+
+## 2026-09-27 — `forcing_audit` lands: a position-level soundness check for forcing rules
+
+**Status:** firm. Adds `cli/src/bin/forcing_audit.rs`, documented in
+`README.md` and in `DESIGN.md` under *How a dominance gets checked*. The
+recorded run is `docs/results/forcing-audit-20260927.txt`. The 2026-09-26
+entry said its tools were throwaway. This one is kept, because it is the only
+check this project has that tests a forcing rule at the positions where it
+fires.
+
+### Why it is kept
+
+The checks so far work at the level of a deal: a dominance must not flip a
+verdict, and refuted deals are re-solved with each rule removed. A forcing
+rule that loses the game in a position no winning line visits changes no
+verdict. So a deal-level check can pass an unsound rule, and on a deal set
+with few refutations it almost always will. The 2026-09-26 hunt showed that
+concretely. Sampling the search's own positions passed the lagging-pile rule.
+Random walks found it false within seconds.
+
+### The choices it makes
+
+- **Positions come from random walks** under `Gypsy::legal_actions`, seeded
+  from the deal number, so a run is reproducible. At most `--per-deal`
+  distinct positions per deal, deduplicated by key.
+- **The verifier is the rules-legal game with every dominance removed.** It
+  takes moves from `State::legal_moves`, ordered foundation plays first and
+  worry-backs last. Ordering discards nothing. Without it, the worry-back
+  game with no forcing rule decided 1 of 15 rank-4 checks on a 2M budget.
+  The solver's transposition key is reused. It is not a dominance: two
+  positions share a key only when they have the same future.
+- **Capped deals only**: `--top-rank` from 4 to 12. At thirteen ranks almost
+  every check would come back undecided.
+- **A known-false control is built in**: `--rule lagging-pile`. If it stops
+  producing counterexamples, the audit has lost its teeth, just as the
+  first version had.
+- **It exits non-zero on any counterexample**, so it can serve as a gate.
+
+Rejected: a runtime switch in `Gypsy` to turn the forcing rule off for
+verification. `DESIGN.md` rules out runtime toggles for dominances, and a
+separate rule-free `Game` in the tool keeps the solver untouched.
+
+### What it found, rerun with the committed tool
+
+The 2026-09-26 numbers came from the scratch version. That version used a
+different walk generator and, for most of the runs, an unordered verifier,
+so it sampled different positions. These are the committed tool's runs.
+Every run was cut at nine minutes, which is where the deal counts come from.
+
+| Rule, arm, deck | deals | checked | counterexamples | undecided |
+|---|---:|---:|---:|---:|
+| `lagging-pile` control, restricted, cap 5 | 297 | 5,870 | **6** | 64 |
+| shipped, restricted, cap 4 | 377 | 7,515 | 0 | 25 |
+| shipped, restricted, cap 5 | 158 | 3,116 | 0 | 44 |
+| shipped, full, cap 4 | 180 | 3,558 | 0 | 42 |
+| shipped, full, cap 5 | 102 | 1,997 | 0 | 43 |
+
+"Checked" counts positions found winnable plus positions found lost; lost
+positions can't yield a counterexample. The control fails as it must, and
+with no pruning rule trusted, so those six counterexamples stand on their own.
+Neither shipped rule shows a counterexample. That is evidence, not a proof:
+the undecided checks are where one could still hide.
+
+**Cost is the limit.** A rule-free search that has to prove a child lost is
+slow, especially with worry-back. A long audit is Gizmo's job, not a local
+one.
