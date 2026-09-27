@@ -133,6 +133,24 @@ cards up, so without it the forcing rule's rewrite is never exercised. Set
 `COMPOSE_TRACE=1` for the step-by-step. `docs/results/gypsy-composition-construction.jsonl`
 is the recorded run.
 
+`cargo run --release --bin forcing_audit` checks a forcing rule where it fires,
+not deal by deal. On capped deals it gathers positions where the rule forces a
+move by random walks under the solver's move set. It then solves each position
+and its forced child with every pruning rule removed, so the check trusts no
+rule, including the one under audit. A winnable position whose forced child is
+lost is a counterexample, and the run exits non-zero:
+
+```
+forcing_audit --arm no-worry-back --top-rank 5 --deals 500
+forcing_audit --arm full --top-rank 4 --deals 200
+forcing_audit --rule lagging-pile --top-rank 5 --deals 300   # control: must fail
+```
+
+`--rule shipped` (the default) audits whatever `Gypsy::forced_action` forces.
+`--rule lagging-pile` is a rule known to be false, kept so the audit can show
+it still catches one. `docs/results/forcing-audit-20260927.txt` is the recorded
+run.
+
 ## Restarts
 
 `--restarts k` splits the budget into *k* searches, each under a different move

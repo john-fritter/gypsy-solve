@@ -3393,3 +3393,390 @@ combinatorial expectation — is cheap and has never been run.
 
 **Rule from here: a winnability number is quoted with its sampling allowance and
 its sample size, or it is not quoted.**
+
+---
+
+## 2026-09-24 — The strong split-run rule is licensed and worthless, and the budget goes where no rule reaches
+
+**Status:** firm (a measurement and a rejection). No solver change. Measured
+with throwaway tools against `9a2ddc8`. Their source was not kept, because
+each is a wrapper around `Gypsy::legal_actions` that can be rebuilt in a few
+minutes from the description below.
+
+### Where the budget goes
+
+This was measured over the **whole search**, not the first descent: every
+expansion counted, on seeds 12, 23, 32 and 37 (the hardest of the fifty-deal
+set). Restricted arm, 12M contiguous, 1,024 MiB table, all four `unknown`.
+
+| | seed 12 | 23 | 32 | 37 |
+|---|---:|---:|---:|---:|
+| expansions with the stock empty | 97.0% | 96.1% | 95.3% | 97.8% |
+| of those, a forced play | 0.0% | 4.0% | 0.0% | 2.3% |
+| moves per expansion, stock empty | 2.88 | 2.53 | 2.23 | 2.86 |
+| foundation plays among those moves | 30.1% | 30.8% | 33.9% | 19.9% |
+
+Positions with an empty column make up at most 0.1% of expansions. Sampled
+positions from deep in seed 12's search have 19–25 of 104 cards up, and one
+foundation pile of every suit is at its ace or empty. **So the search spends
+its budget in a crowded endgame where no safe-play rule can fire.** The
+two-deck test needs all four opposite-colour piles to have passed rank *r−1*,
+and with the second pile of each suit stuck at the ace, nothing above a two
+ever passes.
+
+### Tried: split only when the exposed card goes up next
+
+This is the stronger form of Theorem 4, which the 2026-09-16 gate proof said it
+did not establish. **It does establish it.** The proof works for any gated
+split, not just one that exposes a dead card: the move it defers is exactly a
+split followed at once by the exposed card's foundation play, and a mirrored
+move keeps its cut status under the stronger definition too. So the rewrite
+still has one fewer cut move each time, and the induction still ends. It was
+implemented as a fused action (the split plus the foundation play) so that it
+stays a function of the position.
+
+| Test | Result |
+|---|---|
+| 20,000 rank-4 deals, restricted | verdicts identical; nodes −0.008% |
+| refutations 188, 3796, 3966, 4617 | identical to the node |
+| refutation 4260 | −254 of 5,692,561 |
+| seeds 12, 23, 32, 37 at 12M | still `unknown` |
+
+**Rejected: the stronger form is sound and has no effect.** Once the stock is
+empty, splits that expose a *playable* card are rare. The tableau moves the
+search actually makes (66–79% of its moves) carry whole runs off cards they
+don't build on. No split rule touches those moves. Don't build it.
+
+### A gap in the 2026-09-16 write-up, not in the rule
+
+The proof handles the case where the slot card `x` is played up first. It
+doesn't mention its twin `d` going up first. That case closes the same way:
+the real line's `d` is bare, so the copy's `x` is bare and `d` holds the other
+pile. The copy lifts that pile onto `x` and plays `d`, which is one inserted
+move, not cut, and the lines are identical after it. Recorded so that the next
+reader doesn't mistake the omission for a hole.
+
+### The one rule left aimed at those nodes, sized and not built
+
+That rule would be a safe-play test that tolerates one foundation pile per suit
+lagging behind. To size it, a deliberately **unsound** version of the test was
+used, one that checks only the leading pile of each opposite-colour suit. It
+would force a move at **10.3%, 21.9%, 0.0% and 31.9%** of stock-empty
+expansions on the four seeds. That is real, but it is an unsound rule's
+ceiling. A sound version has to handle the second copies, which are exactly
+the cards the lagging pile still wants, and that is where Blake & Gent's proof
+stops. The proof would be hard and the payoff is uncertain, so it is deferred
+until the budget curve says it is needed.
+
+### Next: pin the budget slope first
+
+`docs/prompts/gypsy-192M-slope-pin.md` re-solves the 125 deals left unknown by
+the 48M / restart-32 survey, at 192M / restart-128, on the same 256 MiB table.
+The run is exact: `solve_restarting` slices the budget evenly and derives each
+restart's ordering from its index, so restarts 1–32 replay the 48M run node for
+node, and nothing that run resolved can come back unknown. The prompt makes
+Gizmo check this on three deals before starting.
+
+It is not cheap, though. The unknowns were already most of the survey's cost,
+so expect about twelve hours. If the multiplier holds near 0.54, 1% unknown is
+a matter of compute. If it levels off, the residue is deals that restarts
+can't settle, and a dominance becomes the only route again.
+
+---
+
+## 2026-09-24 — The third point: the budget curve flattens, and restarts are running out
+
+**Status:** firm (a measurement). This run was requested in
+`docs/prompts/gypsy-192M-slope-pin.md`. Gizmo ran it at `2d72ec5`; the report
+is `docs/reports/gypsy-slope-pin-20260924T091957Z.md` and the results file is
+`gypsy-both-192M-restart128-48Munknowns.jsonl` (in Gizmo's workspace). It covers
+the 125 restricted-arm unknowns from the 48M / restart-32 survey, at 192M /
+restart-128, 256 MiB table, both arms.
+
+**The exactness canary passed.** Seeds 268, 330 and 562 were solved at 48M on
+restart 31, and at 192M / 128 they came back with the same verdict, node count
+and restart. So restarts 1–32 do replay the 48M run, and re-solving only the
+unknowns is exact. Both sets of deals still unknown are subsets of the 48M
+sets, as they must be.
+
+| Arm | unknown at 12M / r8 | 48M / r32 | 192M / r128 | multiplier, last step |
+|---|---:|---:|---:|---:|
+| restricted | 232 | 125 | **93** | 0.539 → **0.744** |
+| full | 211 | 115 | **82** | 0.545 → **0.713** |
+
+**The slope flattened.** The chance that one more restart solves a deal still
+unknown, restricted arm:
+
+| restarts | deals solved | chance per restart |
+|---|---:|---:|
+| 9–32 | 107 of 232 | ~2.5% |
+| 33–48 | 9 | 0.45% |
+| 49–64 | 8 | 0.43% |
+| 65–80 | 8 | 0.46% |
+| 81–96 | 5 | 0.31% |
+| 97–128 | 2 | 0.07% |
+
+The deals that a 1.5M search solves by luck have been solved, and what is left
+almost never gets that luck. **More restarts of this size will not reach 1%
+unknown at any budget worth running.** This withdraws the "four more fourfold
+steps, about three days" projection in `DESIGN.md`, which rested on the first
+two points only.
+
+**The winnability lower bound moves anyway.** The full game has 918 solvable of
+1,000, so Wilson 95% gives **≥89.9%**. The previous figure was ≥85.6%, but it
+counted the restricted arm's 878 wins when the full arm had already proved
+888. Using the restricted count was conservative, not wrong; the full-arm
+count is the right one for the ruleset under study. The upper bound is
+unchanged. `DESIGN.md` is corrected.
+
+**Worry-back delta: unchanged.** Four more deals are full-`solvable` and
+restricted-`unknown` (270, 376, 928, 934). None is restricted-`unsolvable`, so
+none says anything about the delta.
+
+**It took 6h35m wall clock**, against the prompt's twelve-hour estimate.
+
+### What the residue is, and what that means for the route
+
+There are 93 deals (82 in the full game) on which a 1.5M-node search almost
+never finds a win. That set holds every unwinnable deal among the thousand,
+since restarts cannot prove any deal unwinnable, and winnable deals whose wins
+need a longer single descent. The two call for different tools:
+
+- **Winnable but deep:** a bigger slice, or a better move ordering. Ordering is
+  free, because it discards nothing and needs no proof.
+- **Unwinnable:** only exhaustion, which means pruning, which means a
+  dominance. That points back to the lagging-pile safe test sized earlier
+  today: at most 0–32% of forced nodes, and a proof nobody has written.
+
+Which tool is right depends on the mix, and nothing measured so far gives it.
+The cheapest way to find out needs no code: the same 93 deals at the same 192M,
+as 32 x 6M. If the bigger slice solves many of them, the residue is mostly
+winnable and deep. If it solves few, the residue is mostly jammed. This is
+**provisional**, and it is John's call.
+
+---
+
+## 2026-09-25 — Deeper slices on the residue: about what more restarts would buy, and neither is a route
+
+**Status:** firm (a measurement). This run was requested in
+`docs/prompts/gypsy-residue-slice-test.md`. Gizmo ran it at `2d72ec5`; the
+report is `docs/reports/gypsy-residue-slice-test-20260925T040849Z.md` and the
+results file is `gypsy-both-192M-restart32-slice6M-residue93.jsonl`. It covers
+the 93 restricted unknowns at 192M as 32 x 6M, 256 MiB table, both arms. The
+canary passed: seed 188 restricted came back `unsolvable` on restart 1, in
+4,203,474 nodes, the same count as on a 1,024 MiB table.
+
+| Arm | input | solvable | unsolvable | unknown |
+|---|---:|---:|---:|---:|
+| restricted | 93 | **10** | 1 (seed 188) | 82 |
+| full, previous residue | 82 | **6** | 0 | **76** |
+
+Full-arm wins: five carried from restricted wins (56, 191, 193, 691, 692) and
+one found by the full search itself, seed 508. The report's list of remaining
+full-arm unknowns has 77 entries, not 76: it includes seed 270, which the
+192M / 128 run had already solved in the full arm. The correct list is the
+report's minus 270.
+
+### What the depth distribution does and does not show
+
+All ten restricted wins came more than 1.5M nodes into their slice: six
+between 1.5M and 3M, four after 3M, and one (seed 185) at 5.94M. **The empty
+≤1.5M band is guaranteed by how the run was set up, not a finding.** Restarts
+1–32 use the same orderings as the 1.5M run's restarts 1–32, and a search's
+first 1.5M nodes are the same whatever its budget. So any win within 1.5M
+would already have been found. The prompt called this "the measurement that
+matters most", and that was wrong in the same way the 2026-09-19 `branching`
+reading was: the number was fixed by the way it was measured. What the run
+does show is that these ten deals needed a *deeper* search under orderings
+that had failed at 1.5M.
+
+**The comparison that decides the question is yield per node, and it's a
+draw.** Continuing 1.5M restarts from 129 to 256 at the last observed rates
+(0.07% to 0.13% per restart per deal) would be expected to solve 8 to 14 of
+these 93. The 6M slices solved 10 for the same budget. So bigger slices are
+not a better use of nodes than more restarts, and neither changes the trend:
+each 192M spent on the residue solves about a tenth of it, and less each time.
+Getting from 75 unknown to the 10 that the ±0.5% figure allows would take
+around twenty more runs like this one, even if the rate stopped falling, and
+it hasn't.
+
+**Budget, spent as restarts or as depth, is no longer a route to the headline
+figure.** What's left is either a smarter search (a better move ordering,
+which is free to try because it discards nothing) or pruning (a dominance,
+which needs a proof). Which of the two depends on how much of the residue is
+unwinnable, and this run didn't settle that: it found ten deep wins and no new
+refutations.
+
+### The bound
+
+For the full game on seeds 0–999: **924 solvable, 1 unsolvable, 75 unknown**,
+which gives Wilson 95% **≥90.6%**. `DESIGN.md` is corrected. Worry-back delta:
+no deal is restricted-`unsolvable` and full-`solvable`, still.
+
+---
+
+## 2026-09-26 — A heuristic ordering changes which deals get lucky, not how many; the lagging-pile rule is false; the shipped forcing rules pass an independent audit
+
+**Status:** firm (measurements and a rejection). No solver change. Measured
+with throwaway tools at `9a2ddc8` source (the solver is unchanged since
+`2d72ec5`); each is described well enough below to rebuild.
+
+### Ordering: no gain
+
+This was the one lever left for the residue that needs no proof. Reordering
+discards nothing. The heuristic, *dig*, ranks each move by how deeply the
+cards the eight foundation piles need next are buried once the move is made,
+minus a weight per card on the foundations. Ties keep the salted order, so
+restarts still differ. Restricted arm, seeds 0–99, 12M as 8 x 1.5M, 256 MiB.
+The baseline reproduces the survey's 19 unknowns exactly.
+
+| Ordering | unknown | nodes | vs baseline |
+|---|---:|---:|---|
+| baseline | 19 | 393.4M | |
+| classes kept, *dig* within each | 22 | 354.3M | +5 / −8 |
+| *dig*, foundation weight 2 | 18 | 328.8M | +7 / −6 |
+| *dig*, foundation weight 4 | 18 | 334.1M | +7 / −6 |
+| *dig*, foundation weight 8 | 21 | 371.9M | +7 / −9 |
+
+Every variant solves several deals the baseline misses and loses several it
+solves. That churn, with no net gain, is what a *different* ordering does, not
+a *better* one. The residue confirms it: *dig* at weight 4 on 20 of the 82
+residue deals, at 24M as 16 x 1.5M, solved **0 of 20**. **Rejected.** A
+heuristic ordering is not the lever for the residue.
+
+### The lagging-pile rule: false, and found false in seconds
+
+The rule tested (R1): a card of rank *r* may be forced to its foundation when,
+in each opposite-colour suit, the *leading* pile has reached *r−1*. That is,
+it ignores the second copies. On 2026-09-24 an unsound version of this rule
+was sized at 0–32% of stock-empty nodes.
+
+**Method: a position-level check, not a deal-level one.** A forcing rule is
+sound exactly when every winnable position it fires in has a winnable forced
+child. On capped deals, positions are collected by random walks under the
+solver's own move set, 200 walks of up to 400 moves each and at most 20
+positions per deal. Walks reach tight and lost positions that the search's
+first descent never visits. Both the position and its forced child are then
+searched to the end.
+
+The first version sampled only positions the search itself expanded, and it
+found nothing. Every position it sampled was winnable, because the
+solver's first descent stays on winning ground. That is the same blind spot as
+the 2026-09-15 harness hole: a test that never sees a losing position cannot
+catch a rule that creates one.
+
+| Deck | positions checked | R1 counterexamples | R1 + bare-twin guard |
+|---|---:|---:|---:|
+| rank cap 4 | 79,962 | 15 (all rank 2) | 16 |
+| rank cap 5 | 79,850 | 16 (ranks 2, 3, 5) | 13 |
+| rank cap 6 | 79,292 | 74 (ranks 2–6) | 37 |
+
+The rate climbs with deck size, from 0.2 to 0.9 per thousand positions, so the
+full game is likely worse still. The bare-twin guard fires only when another
+bare card of the same rank and colour could stand in as the base. It halves
+the rate at cap 6 and removes nothing structurally.
+
+The failure is the one the rule was meant to paper over. Seed 3177 at cap 5
+forces 5♣ with both red suits' piles at 5 and at the ace, the exact lagging
+shape seen in full-size endgames. A second-copy red 4 still needs a black 5.
+
+The counterexamples above were confirmed by a search that itself used the
+shipped rules. Four more at cap 5 (2,000 deals) were confirmed with **a
+search that uses no pruning rule at all**, so they depend on no rule being
+sound. Seed 1395 at cap 5 is one: it forces 3♣ with the hearts and diamonds
+piles at 2 and empty.
+
+**Rejected.** Any sound lagging-pile rule needs a positional argument that the
+forced card is not the base some second copy must have. The obvious guard
+doesn't supply one. Nothing further is planned for it.
+
+### The shipped forcing rules, audited with a rule-free verifier
+
+The same hunter was pointed at the rules that ship: safe autoplay in the
+restricted arm and the two-deck safe-foundation rule in the full arm. Positions
+where the shipped rule fires were checked with the no-pruning search.
+Ordering it (foundation plays first, worry-backs last) was necessary for the
+full arm, where an unordered search decided 1 of 15 checks.
+
+| Arm, deck | positions checked | counterexamples | undecided |
+|---|---:|---:|---:|
+| restricted, cap 4 | 39,798 | **0** | 226 |
+| restricted, cap 5 | 39,367 | **0** | 700 |
+| full, cap 4 | 6,578 | **0** | 72 |
+| full, cap 5 | 2,514 | **0** | 73 |
+
+The full-arm rows are partial: the runs were cut at nine minutes, because a
+rule-free worry-back search is slow to finish. The deal-level checks this project
+used so far could only catch a rule that flips a *deal's* verdict. This checks
+the rule at every sampled position, and verifies without trusting any rule.
+It is the strongest soundness evidence either shipped rule has had. It is
+still evidence, not a proof. Undecided children are where a counterexample
+could still hide.
+
+---
+
+## 2026-09-27 — `forcing_audit` lands: a position-level soundness check for forcing rules
+
+**Status:** firm. Adds `cli/src/bin/forcing_audit.rs`, documented in
+`README.md` and in `DESIGN.md` under *How a dominance gets checked*. The
+recorded run is `docs/results/forcing-audit-20260927.txt`. The 2026-09-26
+entry said its tools were throwaway. This one is kept, because it is the only
+check this project has that tests a forcing rule at the positions where it
+fires.
+
+### Why it is kept
+
+The checks so far work at the level of a deal: a dominance must not flip a
+verdict, and refuted deals are re-solved with each rule removed. A forcing
+rule that loses the game in a position no winning line visits changes no
+verdict. So a deal-level check can pass an unsound rule, and on a deal set
+with few refutations it almost always will. The 2026-09-26 hunt showed that
+concretely. Sampling the search's own positions passed the lagging-pile rule.
+Random walks found it false within seconds.
+
+### The choices it makes
+
+- **Positions come from random walks** under `Gypsy::legal_actions`, seeded
+  from the deal number, so a run is reproducible. At most `--per-deal`
+  distinct positions per deal, deduplicated by key.
+- **The verifier is the rules-legal game with every dominance removed.** It
+  takes moves from `State::legal_moves`, ordered foundation plays first and
+  worry-backs last. Ordering discards nothing. Without it, the worry-back
+  game with no forcing rule decided 1 of 15 rank-4 checks on a 2M budget.
+  The solver's transposition key is reused. It is not a dominance: two
+  positions share a key only when they have the same future.
+- **Capped deals only**: `--top-rank` from 4 to 12. At thirteen ranks almost
+  every check would come back undecided.
+- **A known-false control is built in**: `--rule lagging-pile`. If it stops
+  producing counterexamples, the audit has lost its teeth, just as the
+  first version had.
+- **It exits non-zero on any counterexample**, so it can serve as a gate.
+
+Rejected: a runtime switch in `Gypsy` to turn the forcing rule off for
+verification. `DESIGN.md` rules out runtime toggles for dominances, and a
+separate rule-free `Game` in the tool keeps the solver untouched.
+
+### What it found, rerun with the committed tool
+
+The 2026-09-26 numbers came from the scratch version. That version used a
+different walk generator and, for most of the runs, an unordered verifier,
+so it sampled different positions. These are the committed tool's runs.
+Every run was cut at nine minutes, which is where the deal counts come from.
+
+| Rule, arm, deck | deals | checked | counterexamples | undecided |
+|---|---:|---:|---:|---:|
+| `lagging-pile` control, restricted, cap 5 | 297 | 5,870 | **6** | 64 |
+| shipped, restricted, cap 4 | 377 | 7,515 | 0 | 25 |
+| shipped, restricted, cap 5 | 158 | 3,116 | 0 | 44 |
+| shipped, full, cap 4 | 180 | 3,558 | 0 | 42 |
+| shipped, full, cap 5 | 102 | 1,997 | 0 | 43 |
+
+"Checked" counts positions found winnable plus positions found lost; lost
+positions can't yield a counterexample. The control fails as it must, and
+with no pruning rule trusted, so those six counterexamples stand on their own.
+Neither shipped rule shows a counterexample. That is evidence, not a proof:
+the undecided checks are where one could still hide.
+
+**Cost is the limit.** A rule-free search that has to prove a child lost is
+slow, especially with worry-back. A long audit is Gizmo's job, not a local
+one.

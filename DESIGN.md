@@ -293,6 +293,18 @@ budget-exhausted.
       proven-unsolvable deals and no verdict contradicted. The Gypsy full arm
       went from 0 of 50 resolved to 29, and solved its first deal by itself.
 
+   5. ~~*Split only when the exposed card goes up next.*~~ **Dead,
+      2026-09-24.** The 2026-09-16 proof already covers this stronger form of
+      Theorem 4, but it changes nothing: the refutation trees are identical
+      to the node. Once the stock is empty, splits that expose a playable card
+      are rare.
+   6. ~~*A lagging-pile safe test.*~~ **Dead, 2026-09-26.** Forcing a card
+      once each opposite-colour suit's *leading* pile has reached *r−1*,
+      ignoring the second copies, is false. `forcing_audit` finds
+      counterexamples at every rank cap tried, some confirmed with no
+      pruning rule trusted. It is kept in the tool as the control that must
+      keep failing.
+
    Every one of these is measured on the same Klondike deal set, and Klondike
    is a regression test with teeth: a dominance may change node counts and
    how many deals resolve, and must **not** change any verdict that was already
@@ -483,6 +495,18 @@ rather than re-deriving:
   narrow but it is the only check in the failing direction that is actually
   about this game. It found a false refutation in **safe autoplay** the day it
   existed, so that rule is under dispute and is the next thing to settle.
+- **A forcing rule is audited position by position before it ships**, with
+  `cargo run --release --bin forcing_audit` (added 2026-09-27). The tool takes
+  positions from random walks on capped deals, not from the search, because the
+  search's first descent stays on winning ground. At each position where the
+  rule fires, it solves the position and its forced child in the rules-legal
+  game with every pruning rule removed. A winnable position with a lost child
+  is a counterexample. The deal-level bar above only sees a rule that flips a
+  whole deal, and a first version that sampled the search passed a false
+  rule. Add the candidate as a `Rule` in the tool, and check that the
+  `lagging-pile` control still fails in the same run. A control that stops
+  failing means the audit has lost its teeth. Undecided checks are where a
+  counterexample could still hide, so a clean audit is evidence, not a proof.
 - **Verifying a refutation is not the same test, and the difference cost a day.**
   Re-solve the refuted seed with each dominance removed in turn. Only
   `unsolvable` becoming **`solvable`** shows a rule failing — that is where a
@@ -508,7 +532,12 @@ The first thousand-deal survey, both arms, 256 MiB tables:
 | Budget | restricted unknown | full unknown |
 |---:|---:|---:|
 | 12M as 8 x 1.5M | 23.2% | 21.1% |
-| 48M as 32 x 1.5M | **12.5%** | **11.5%** |
+| 48M as 32 x 1.5M | 12.5% | 11.5% |
+| 192M as 128 x 1.5M | **9.3%** | **8.2%** |
+
+The 192M point (2026-09-24) re-solved only the 48M unknowns. That gives the
+same result as re-solving everything, because restarts 1–32 replay the 48M run
+node for node.
 
 No deal was proved unsolvable in those runs, **and they could not have been**:
 restarts slice the budget and nothing full-size exhausts in 1.5M nodes. The
@@ -518,31 +547,42 @@ On Klondike the same small sample was twice as *hard* as its population, so the
 rule is that fifty deals are unreliable in an unpredictable direction, not that
 they are pessimistic.
 
-The step is a multiplier of **0.539**, steeper than Klondike's 0.644, and it is
-two points with the restart count moving alongside the budget — provisional. On
-that slope 1% unknown is about 1.4x10^10 nodes a deal, four fourfold steps past
-48M.
+**The slope flattened, measured 2026-09-24.** The multiplier per fourfold step
+went from 0.539 to **0.744** (restricted) and 0.545 to **0.713** (full). The
+chance that one more restart solves a deal still unknown fell from about 2.5%
+over restarts 9–32 to about 0.45% over restarts 33–80, then to under 0.2% over
+restarts 81–128, where only two deals were solved. A restart count that grows
+without limit does not reach 1% unknown on any budget worth running. The
+1.4x10^10-node projection that stood here came from the first two points only,
+and it is withdrawn.
 
 **Gypsy has no memory wall.** Each restart is a fresh search with its own table,
 so the table is sized by the 1.5M slice rather than the total budget: occupancy
 was 8.94% at both budgets and stays there at any budget. Where Klondike's 1%
-threshold wanted 124 GiB a worker, Gypsy's wants 256 MiB. Time is the only
-constraint, and four more fourfold steps is on the order of three days on this
-box rather than a hardware question.
+threshold wanted 124 GiB a worker, Gypsy's wants 256 MiB. That still holds.
+What does not hold is the conclusion drawn from it: more restarts of the same
+size have stopped paying. The 93 deals left are ones where a 1.5M-node search
+almost never finds a win. That includes every unwinnable deal, and restarts
+can never prove one of those.
 
-Pin the slope before spending that. A 192M / restart-128 point costs about half
-a day, and two points are exactly what got the Klondike slope wrong.
-
-### The bracket, as of 2026-09-23
+### The bracket, as of 2026-09-25
 
 Contiguous runs over 5,000 deals proved **five** deals unwinnable — seeds 188,
-3796, 3966, 4260, 4617 — every one of them in **both** arms. Merging every run
-on seeds 0–999 gives 878 solvable, 1 unsolvable, 121 unknown.
+3796, 3966, 4260, 4617 — every one of them in **both** arms. On seeds 0–999 the
+full game, which is the ruleset under study, has **924 solvable**, 1
+unsolvable (seed 188) and 75 unknown, merging 192M as 128 x 1.5M with 192M as
+32 x 6M on the residue. The 2026-09-23
+figure of 878 counted restricted-arm wins only, which is conservative but
+below what the full arm had already proved.
 
 | | |
 |---|---|
-| sample bracket, seeds 0–999 | 87.8% – 99.9% |
-| **population, Wilson 95%** | **85.6% – 99.96%** |
+| sample bracket, seeds 0–999 | 92.4% – 99.9% |
+| **population, Wilson 95%** | **90.6% – 99.96%** |
+
+The solvable count is a floor. The contiguous 12M run solved three deals that
+the 48M run left unknown, and some of those may be among the 75, which would
+raise it by at most three.
 
 **Quote the second line, never the first alone**, and say which sample it came
 from: the lower bound is the thousand deals that got the strongest search, the
@@ -550,10 +590,10 @@ upper is all five thousand contiguous, because constraining a rare event needs
 deals rather than depth. The upper bound is close to vacuous — five refutations
 put the population's unwinnable rate at only ≥0.043% with 95% confidence.
 
-**What is honestly claimable: at least about 85% winnable, and at least a few
-per thousand not.** Narrowing it is the unknown bucket's job, and the unknown
-bucket is 12% on the best-resolved thousand against the 1% the ±0.5% figure
-needs.
+**What is honestly claimable: at least about 90% winnable, and at least a few
+per thousand not.** Narrowing it is the unknown bucket's job. That bucket is
+7.5% on the best-resolved thousand, against the 1% the ±0.5% figure needs.
+Neither more restarts nor deeper ones shrink it at a useful rate (2026-09-25).
 
 ### The Gypsy batch: the gate is cleared
 
