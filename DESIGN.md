@@ -590,6 +590,13 @@ upper is all five thousand contiguous, because constraining a rare event needs
 deals rather than depth. The upper bound is close to vacuous — five refutations
 put the population's unwinnable rate at only ≥0.043% with 95% confidence.
 
+The intervals treat sequential seeds as i.i.d. uniform deals. **Tested
+2026-09-28 and it holds**: at ten million deals the shuffle matches its exact
+expectation on card position, consecutive-seed dependence and face-up and
+face-down aces, and a known-biased control fails. Seeds 0–999 run slightly
+short of face-up aces (1.17 a deal against 1.23), by chance. Whether that moves
+the bound is checked when the numbers are regenerated. See `DECISIONS.md`.
+
 **What is honestly claimable: at least about 90% winnable, and at least a few
 per thousand not.** Narrowing it is the unknown bucket's job. That bucket is
 7.5% on the best-resolved thousand, against the 1% the ±0.5% figure needs.

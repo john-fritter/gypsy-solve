@@ -3820,3 +3820,61 @@ Before writing, in order:
 
 The "Analysis beyond the headline number" list in `DESIGN.md` runs alongside
 the writeup, on the archived files.
+
+---
+
+## 2026-09-28 — The shuffle is uniform on every statistic tested
+
+**Status:** firm (a measurement). Adds `cli/src/bin/deal_stats.rs` and
+`analysis/shuffle_uniformity.py`. The recorded run is
+`docs/results/shuffle-uniformity-20260928.txt`, and the counts are next to it.
+
+This closes the assumption flagged on 2026-09-23: every Wilson interval here
+treats sequential seeds as i.i.d. uniform deals, and nobody had tested it.
+
+The Rust tool only counts, using `State::deck` and `State::deal` themselves, so
+the shuffle under test is the one that dealt every result. Python does the
+statistics, in the stdlib only, as the other analysis scripts do. Four tests,
+each against an exact expectation:
+
+| Test | What it catches |
+|---|---|
+| card × deck position, 52 × 104 | a card favouring some slots |
+| seed `s` against seed `s + 1`, slot by slot | dependence between sequential seeds |
+| aces face up, 16 cards | hypergeometric(104, 8, 16) |
+| aces face down, 8 cards | hypergeometric(104, 8, 8) |
+
+The two tables have margins fixed by construction, so Pearson's statistic is
+scaled by 103/104. Unscaled it runs about a third of a standard deviation high
+on a correct shuffle. **Pass means every p ≥ 0.001.**
+
+| Sample | position | consecutive | aces up | aces down |
+|---|---:|---:|---:|---:|
+| seeds 0–999 | 0.96 | 0.11 | 0.025 | 0.90 |
+| seeds 0–4999 | 0.65 | 0.88 | 0.009 | 0.22 |
+| **seeds 0–9,999,999** | **0.24** | **0.88** | **0.84** | **0.13** |
+| control, naive shuffle, 5,000 | 2.6e-60 | 0.002 | 0.71 | 0.39 |
+| control, naive shuffle, 10M | <1e-300 | 4e-175 | <1e-300 | 3e-55 |
+
+**The generator passes at ten million deals**, where the position test would
+see a bias of about 0.06% spread over every slot, and more in a few slots. The
+control fails as it must.
+
+**Power is the reason for the 10M row.** The naive control *passes* at a
+thousand deals (worst p 0.016), so a thousand-deal sample on its own is too
+small to see a textbook-biased shuffle. The survey ranges are tested for
+completeness, and the generator is tested at 10M.
+
+**One thing to carry into the writeup.** Seeds 0–4999 show 1.19 aces face up per
+deal against 1.23 expected (z −2.9 on the mean; p 0.009 on the histogram, the
+lowest of twelve tests and not significant after correcting for that). At 10M
+the generator shows no such deviation (z −1.0), so this is chance in that
+sample and not bias in the shuffle. The seeds 0–999 set, the one the bound comes
+from, leans the same way (z −1.85). If face-up aces make a deal easier, the
+bound is slightly conservative. That is unmeasured: the regeneration script
+should give winnability by face-up ace count and a figure reweighted to the
+hypergeometric, and the writeup should quote both if they differ.
+
+Rejected: testing in Rust with a hand-rolled p-value, and a Python copy of the
+shuffle. The first puts statistics on the wrong side of the results-file
+boundary. The second is a second implementation of the thing under test.
