@@ -3780,3 +3780,43 @@ the undecided checks are where one could still hide.
 **Cost is the limit.** A rule-free search that has to prove a child lost is
 slow, especially with worry-back. A long audit is Gizmo's job, not a local
 one.
+
+---
+
+## 2026-09-28 — Write up the bound now; the ±0.5% figure is deferred
+
+**Status:** firm (John's call, on the review below).
+
+Budget, restarts, deeper slices and move ordering are all measured out
+(2026-09-24 to 2026-09-26), and the one dominance aimed at the crowded
+endgame is false. No known lever takes the unknown bucket from 7.5% to the 1%
+a ±0.5% figure needs. What is already claimable is new and defensible:
+
+- the first published Gypsy winnability figure: **≥90.6% (Wilson 95%)**, full
+  game, seeds 0–999;
+- five proved-unwinnable deals in five thousand, verified with dominances
+  removed;
+- **the worry-back delta is zero on every deal where it can be decided**;
+- none of it rests on a dominance being sound: every win is a replayed line,
+  and every refutation holds with each dominance removed in turn (seed 188
+  with all of them removed at once).
+
+So the writeup comes next, on the bound. A point estimate at ±0.5% would need a
+sound endgame safe-play rule for lagging second copies, or a different search.
+That is research with an uncertain payoff, and it is a v2.
+
+Before writing, in order:
+
+1. **Archive the headline data.** The thousand-deal Klondike validation and
+   every thousand-deal Gypsy result file exist only on fritter.lol, on RAID0.
+   "Get it off that box" was in four prompts and never landed in the repo.
+   `docs/prompts/results-archive.md` asks for it with a named destination.
+2. **Test the shuffle.** Done, next entry.
+3. **One script that regenerates every quoted number from the archived
+   files.** Hand-merging across runs produced the 878-vs-888 slip and the
+   unlabelled 87.5% bracket.
+4. Optional: re-refute 3796, 3966, 4260 and 4617 with every dominance removed
+   at once, as seed 188 was.
+
+The "Analysis beyond the headline number" list in `DESIGN.md` runs alongside
+the writeup, on the archived files.
