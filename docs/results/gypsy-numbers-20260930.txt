@@ -1,0 +1,47 @@
+## Klondike validation (published 81.945%)
+
+| budget | solvable | unsolvable | unknown | bracket, Wilson 95% | contains |
+|---:|---:|---:|---:|---|---|
+| 3M | 755 | 122 | 12.3% | 72.7% – 89.7% | yes |
+| 12M | 777 | 142 | 8.1% | 75.0% – 87.8% | yes |
+| 48M | 791 | 158 | 5.1% | 76.5% – 86.3% | yes |
+| 64M | 792 | 162 | 4.6% | 76.6% – 86.0% | yes |
+
+## Gypsy budget curve, seeds 0–999, 1.5M-node restarts
+
+| budget | restricted unknown | full unknown |
+|---:|---:|---:|
+| 12M as 8 x 1.5M | 232 | 211 |
+| 48M as 32 x 1.5M | 125 | 115 |
+| 192M as 128 x 1.5M | 93 | 82 |
+
+## The bound: seeds 0–999, every run merged
+
+- restricted: 918 solvable, 1 unsolvable, 81 unknown; winnable ≥ 89.9% (Wilson 95%)
+- full (the game under study): 925 solvable, 1 unsolvable, 74 unknown; winnable ≥ 90.7% (Wilson 95%)
+- full-arm wins found only by the contiguous run: [272]
+
+## Refutations: seeds 0–4999, contiguous 12M, plus the re-runs
+
+- contiguous 12M alone: restricted 5 unsolvable, full 2
+- with the full arm run to exhaustion: 5 refuted in the full game, 5 of them in both arms: [188, 3796, 3966, 4260, 4617]
+- unwinnable ≥ 0.043% (Wilson 95%), so winnable ≤ 99.96%
+
+## The worry-back delta, seeds 0–4999
+
+- restricted unsolvable, full solvable (a real delta): 0
+- restricted unsolvable, full unknown (open candidates): 0
+- restricted unknown, full solvable (budget, not evidence): 33
+
+## The bound by face-up aces, seeds 0–999, full game
+
+| face-up aces | deals | expected share | proved winnable |
+|---:|---:|---:|---:|
+| 0 | 263 | 25.0% | 89.0% |
+| 1 | 387 | 39.4% | 94.1% |
+| 2 | 275 | 25.2% | 92.7% |
+| 3 | 64 | 8.5% | 95.3% |
+| 4+ | 11 | 1.8% | 100.0% |
+
+- proved winnable, as sampled: 92.5%; reweighted to the hypergeometric: 92.7% (+0.17 points)
+

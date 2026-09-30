@@ -3878,3 +3878,81 @@ hypergeometric, and the writeup should quote both if they differ.
 Rejected: testing in Rust with a hand-rolled p-value, and a Python copy of the
 shuffle. The first puts statistics on the wrong side of the results-file
 boundary. The second is a second implementation of the thing under test.
+
+---
+
+## 2026-09-30 — The numbers, regenerated from the archive: 925 wins, ≥90.7%
+
+**Status:** firm (a measurement). Adds `analysis/gypsy_numbers.py`, whose
+recorded output is `docs/results/gypsy-numbers-20260930.txt`. The inputs are
+Gizmo's archive (`docs/results/ARCHIVE-20260928.md`, all 28 SHA-256s checked
+against the manifest), plus two files made here.
+
+### The merge, stated once
+
+A verdict belongs to a (seed, ruleset) pair, whatever budget found it. The
+merge is the union of decided verdicts, with the only sound carries: a
+restricted win is a full win, and a full refutation is a restricted one. Two
+decided verdicts that disagree stop the script. **None do**, across every run
+on seeds 0–4999.
+
+### What it corrects
+
+- **Full game, seeds 0–999: 925 solvable, 1 unsolvable, 74 unknown, so
+  winnable ≥90.7% (Wilson 95%).** It was 924 and ≥90.6%. The 2026-09-25 entry
+  left the contiguous 12M run out of the merge and flagged that it might add up
+  to three. It adds one, seed 272.
+- Restricted arm on the same merge: 918, 1, 81, ≥89.9%.
+- Klondike, the budget curve (232/211, 125/115, 93/82), the five refutations,
+  and the ≤99.96% upper bound all reproduce as recorded.
+
+### A gap the archive exposed, closed
+
+**The worry-back null rested on three runs no file recorded.** The full-arm
+refutations of seeds 188, 3966 and 4260 were run in Claude sessions on
+2026-09-20 and 2026-09-23 and only written into this log. The archived
+contiguous file has all three full-arm results as `unknown`. They were re-run
+here at `9dbe4c8`: contiguous, both arms, a 200M budget and a 2,048 MiB table.
+The result is `docs/results/gypsy-both-200M-refutations-contiguous.jsonl`, with
+3796 and 4617 included so that one file holds all five.
+
+| Seed | restricted | full |
+|---:|---:|---:|
+| 188 | 4,203,474 | 19,801,449 |
+| 3796 | 2,283,094 | 8,967,671 |
+| 3966 | 7,713,489 | 48,274,858 |
+| 4260 | 5,692,561 | 13,997,443 |
+| 4617 | 3,202 | 3,211 |
+
+All ten are `unsolvable` with no limit touched, and every count matches the one
+recorded except seed 3966's full arm, which is one node above the logged
+48,274,857. The table size of the original run was never recorded. Probe
+order depends on table capacity, so one node is in keeping with a different
+table, and the verdict is the same. **With these, the script finds no
+restricted-unsolvable deal whose full arm is unknown. The worry-back delta is
+zero, with no open candidates, from files alone.**
+
+### Face-up aces: the sample's shortfall doesn't matter
+
+`deal_stats --per-seed` now writes each deal's face-up and face-down ace count
+(`docs/results/opening-aces-seeds0-4999.jsonl`). The counts come from the real
+deal, so Python never re-deals.
+
+| face-up aces | deals | expected share | proved winnable |
+|---:|---:|---:|---:|
+| 0 | 263 | 25.0% | 89.0% |
+| 1 | 387 | 39.4% | 94.1% |
+| 2 | 275 | 25.2% | 92.7% |
+| 3 | 64 | 8.5% | 95.3% |
+| 4+ | 11 | 1.8% | 100% |
+
+Reweighting to the exact distribution moves proved-winnable from 92.5% to
+92.7%, **+0.17 points**. The sample leans toward harder deals, as expected,
+and by too little to matter. The bound stays as sampled, and the writeup can
+note the check in a sentence. The table above is a lower bound per stratum,
+not a winnability rate: 74 deals are unknown and may sit unevenly across ace
+counts. The 0-ace row is the only one that stands apart, and it is the
+starting point for the opening-card predictors in `DESIGN.md`.
+
+Rejected: shipping per-seed ace counts from a Python re-deal. That would be a
+second implementation of the deal.

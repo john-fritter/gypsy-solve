@@ -20,7 +20,10 @@
 //! position with any position, not any position at or below it). It must fail,
 //! or the test has no teeth.
 //!
-//! Usage: `deal_stats --from 0 --to 1000000 [--control naive] > counts.json`
+//! `--per-seed` prints one line per deal instead, with its face-up and
+//! face-down ace counts, so that results can be broken down by the opening.
+//!
+//! Usage: `deal_stats --from 0 --to 1000000 [--control naive | --per-seed] > counts.json`
 
 use std::process::ExitCode;
 
@@ -40,11 +43,13 @@ fn main() -> ExitCode {
     let mut from: u64 = 0;
     let mut to: Option<u64> = None;
     let mut naive = false;
+    let mut per_seed = false;
     while let Some(arg) = args.next() {
         let mut value = || args.next().unwrap_or_default();
         match arg.as_str() {
             "--from" => from = value().parse().expect("--from takes a seed"),
             "--to" => to = Some(value().parse().expect("--to takes a seed")),
+            "--per-seed" => per_seed = true,
             "--control" => match value().as_str() {
                 "naive" => naive = true,
                 other => {
@@ -59,7 +64,9 @@ fn main() -> ExitCode {
         }
     }
     let Some(to) = to.filter(|&to| to > from + 1) else {
-        eprintln!("usage: deal_stats --from A --to B [--control naive], with B > A + 1");
+        eprintln!(
+            "usage: deal_stats --from A --to B [--control naive | --per-seed], with B > A + 1"
+        );
         return ExitCode::FAILURE;
     };
 
@@ -85,11 +92,21 @@ fn main() -> ExitCode {
         }
         let aces =
             |range: std::ops::Range<usize>| deck[range].iter().filter(|c| c.rank() == 1).count();
+        if per_seed {
+            println!(
+                "{{\"seed\":{seed},\"aces_face_up\":{},\"aces_face_down\":{}}}",
+                aces(FACE_UP),
+                aces(FACE_DOWN)
+            );
+        }
         aces_down[aces(FACE_DOWN)] += 1;
         aces_up[aces(FACE_UP)] += 1;
         previous = Some(deck);
     }
 
+    if per_seed {
+        return ExitCode::SUCCESS;
+    }
     let rows = |table: &[[u64; CARDS]]| {
         table
             .iter()

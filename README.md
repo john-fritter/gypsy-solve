@@ -247,6 +247,9 @@ back `unknown`. So the measured rate is a lower bound, and how close it gets to
 81.945% is the measure of the search rather than of Klondike.
 
 `analysis/klondike_validation.py results.jsonl` turns a run into that bracket.
+`analysis/gypsy_numbers.py` regenerates every figure the writeup quotes, Klondike
+and Gypsy, from the archived files in `docs/results/`. It merges runs by taking
+the union of decided verdicts, and stops on any contradiction.
 It summarises each ruleset in a file separately and never pools them, and it
 refuses any run that does not say `"game":"klondike"` — an unlabelled one
 included. Comparing another game against a Klondike figure would manufacture a
