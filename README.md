@@ -247,6 +247,9 @@ back `unknown`. So the measured rate is a lower bound, and how close it gets to
 81.945% is the measure of the search rather than of Klondike.
 
 `analysis/klondike_validation.py results.jsonl` turns a run into that bracket.
+`analysis/gypsy_numbers.py` regenerates every figure the writeup quotes, Klondike
+and Gypsy, from the archived files in `docs/results/`. It merges runs by taking
+the union of decided verdicts, and stops on any contradiction.
 It summarises each ruleset in a file separately and never pools them, and it
 refuses any run that does not say `"game":"klondike"` — an unlabelled one
 included. Comparing another game against a Klondike figure would manufacture a
@@ -316,3 +319,18 @@ one-rank error entirely (0 in 20,000). It is a smoke test, not validation.
 A seed fixes the whole deal, stock order included. The deck order and the
 shuffle (SplitMix64, in `core/src/rng.rs`) are frozen: changing either changes
 what every published seed means, and a test pins one deal to catch that.
+
+Every interval this project quotes treats sequential seeds as an i.i.d. sample
+of uniform deals. `analysis/shuffle_uniformity.py` tests that, on counts from
+`cargo run --release --bin deal_stats`: card-by-position, consecutive-seed
+dependence, and aces face up and face down against their hypergeometric
+expectation. `--control naive` deals with a known-biased shuffle, which must
+fail:
+
+```
+deal_stats --from 0 --to 10000000 > counts.json
+deal_stats --from 0 --to 5000 --control naive > control.json
+python3 analysis/shuffle_uniformity.py counts.json control.json
+```
+
+`docs/results/shuffle-uniformity-20260928.txt` is the recorded run.

@@ -565,30 +565,38 @@ size have stopped paying. The 93 deals left are ones where a 1.5M-node search
 almost never finds a win. That includes every unwinnable deal, and restarts
 can never prove one of those.
 
-### The bracket, as of 2026-09-25
+### The bracket, as of 2026-09-30
+
+Every figure here is regenerated from the archived results by
+`python3 analysis/gypsy_numbers.py`. The recorded output is
+`docs/results/gypsy-numbers-20260930.txt`. Quote from that, not from memory.
 
 Contiguous runs over 5,000 deals proved **five** deals unwinnable — seeds 188,
 3796, 3966, 4260, 4617 — every one of them in **both** arms. On seeds 0–999 the
-full game, which is the ruleset under study, has **924 solvable**, 1
-unsolvable (seed 188) and 75 unknown, merging 192M as 128 x 1.5M with 192M as
-32 x 6M on the residue. The 2026-09-23
+full game, which is the ruleset under study, has **925 solvable**, 1
+unsolvable (seed 188) and 74 unknown, merging every run on those seeds. The 2026-09-23
 figure of 878 counted restricted-arm wins only, which is conservative but
 below what the full arm had already proved.
 
 | | |
 |---|---|
-| sample bracket, seeds 0–999 | 92.4% – 99.9% |
-| **population, Wilson 95%** | **90.6% – 99.96%** |
-
-The solvable count is a floor. The contiguous 12M run solved three deals that
-the 48M run left unknown, and some of those may be among the 75, which would
-raise it by at most three.
+| sample bracket, seeds 0–999 | 92.5% – 99.9% |
+| **population, Wilson 95%** | **90.7% – 99.96%** |
 
 **Quote the second line, never the first alone**, and say which sample it came
 from: the lower bound is the thousand deals that got the strongest search, the
 upper is all five thousand contiguous, because constraining a rare event needs
 deals rather than depth. The upper bound is close to vacuous — five refutations
 put the population's unwinnable rate at only ≥0.043% with 95% confidence.
+
+The intervals treat sequential seeds as i.i.d. uniform deals. **Tested
+2026-09-28 and it holds**: at ten million deals the shuffle matches its exact
+expectation on card position, consecutive-seed dependence and face-up and
+face-down aces, and a known-biased control fails. Seeds 0–999 run slightly
+short of face-up aces (1.17 a deal against 1.23), by chance. Reweighting the
+sample to the exact distribution moves the proved-winnable share by +0.17
+points, so the bound is very slightly conservative and nothing more. See
+`DECISIONS.md`.
 
 **What is honestly claimable: at least about 90% winnable, and at least a few
 per thousand not.** Narrowing it is the unknown bucket's job. That bucket is

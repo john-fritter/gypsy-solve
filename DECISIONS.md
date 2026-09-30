@@ -3780,3 +3780,179 @@ the undecided checks are where one could still hide.
 **Cost is the limit.** A rule-free search that has to prove a child lost is
 slow, especially with worry-back. A long audit is Gizmo's job, not a local
 one.
+
+---
+
+## 2026-09-28 — Write up the bound now; the ±0.5% figure is deferred
+
+**Status:** firm (John's call, on the review below).
+
+Budget, restarts, deeper slices and move ordering are all measured out
+(2026-09-24 to 2026-09-26), and the one dominance aimed at the crowded
+endgame is false. No known lever takes the unknown bucket from 7.5% to the 1%
+a ±0.5% figure needs. What is already claimable is new and defensible:
+
+- the first published Gypsy winnability figure: **≥90.6% (Wilson 95%)**, full
+  game, seeds 0–999;
+- five proved-unwinnable deals in five thousand, verified with dominances
+  removed;
+- **the worry-back delta is zero on every deal where it can be decided**;
+- none of it rests on a dominance being sound: every win is a replayed line,
+  and every refutation holds with each dominance removed in turn (seed 188
+  with all of them removed at once).
+
+So the writeup comes next, on the bound. A point estimate at ±0.5% would need a
+sound endgame safe-play rule for lagging second copies, or a different search.
+That is research with an uncertain payoff, and it is a v2.
+
+Before writing, in order:
+
+1. **Archive the headline data.** The thousand-deal Klondike validation and
+   every thousand-deal Gypsy result file exist only on fritter.lol, on RAID0.
+   "Get it off that box" was in four prompts and never landed in the repo.
+   `docs/prompts/results-archive.md` asks for it with a named destination.
+2. **Test the shuffle.** Done, next entry.
+3. **One script that regenerates every quoted number from the archived
+   files.** Hand-merging across runs produced the 878-vs-888 slip and the
+   unlabelled 87.5% bracket.
+4. Optional: re-refute 3796, 3966, 4260 and 4617 with every dominance removed
+   at once, as seed 188 was.
+
+The "Analysis beyond the headline number" list in `DESIGN.md` runs alongside
+the writeup, on the archived files.
+
+---
+
+## 2026-09-28 — The shuffle is uniform on every statistic tested
+
+**Status:** firm (a measurement). Adds `cli/src/bin/deal_stats.rs` and
+`analysis/shuffle_uniformity.py`. The recorded run is
+`docs/results/shuffle-uniformity-20260928.txt`, and the counts are next to it.
+
+This closes the assumption flagged on 2026-09-23: every Wilson interval here
+treats sequential seeds as i.i.d. uniform deals, and nobody had tested it.
+
+The Rust tool only counts, using `State::deck` and `State::deal` themselves, so
+the shuffle under test is the one that dealt every result. Python does the
+statistics, in the stdlib only, as the other analysis scripts do. Four tests,
+each against an exact expectation:
+
+| Test | What it catches |
+|---|---|
+| card × deck position, 52 × 104 | a card favouring some slots |
+| seed `s` against seed `s + 1`, slot by slot | dependence between sequential seeds |
+| aces face up, 16 cards | hypergeometric(104, 8, 16) |
+| aces face down, 8 cards | hypergeometric(104, 8, 8) |
+
+The two tables have margins fixed by construction, so Pearson's statistic is
+scaled by 103/104. Unscaled it runs about a third of a standard deviation high
+on a correct shuffle. **Pass means every p ≥ 0.001.**
+
+| Sample | position | consecutive | aces up | aces down |
+|---|---:|---:|---:|---:|
+| seeds 0–999 | 0.96 | 0.11 | 0.025 | 0.90 |
+| seeds 0–4999 | 0.65 | 0.88 | 0.009 | 0.22 |
+| **seeds 0–9,999,999** | **0.24** | **0.88** | **0.84** | **0.13** |
+| control, naive shuffle, 5,000 | 2.6e-60 | 0.002 | 0.71 | 0.39 |
+| control, naive shuffle, 10M | <1e-300 | 4e-175 | <1e-300 | 3e-55 |
+
+**The generator passes at ten million deals**, where the position test would
+see a bias of about 0.06% spread over every slot, and more in a few slots. The
+control fails as it must.
+
+**Power is the reason for the 10M row.** The naive control *passes* at a
+thousand deals (worst p 0.016), so a thousand-deal sample on its own is too
+small to see a textbook-biased shuffle. The survey ranges are tested for
+completeness, and the generator is tested at 10M.
+
+**One thing to carry into the writeup.** Seeds 0–4999 show 1.19 aces face up per
+deal against 1.23 expected (z −2.9 on the mean; p 0.009 on the histogram, the
+lowest of twelve tests and not significant after correcting for that). At 10M
+the generator shows no such deviation (z −1.0), so this is chance in that
+sample and not bias in the shuffle. The seeds 0–999 set, the one the bound comes
+from, leans the same way (z −1.85). If face-up aces make a deal easier, the
+bound is slightly conservative. That is unmeasured: the regeneration script
+should give winnability by face-up ace count and a figure reweighted to the
+hypergeometric, and the writeup should quote both if they differ.
+
+Rejected: testing in Rust with a hand-rolled p-value, and a Python copy of the
+shuffle. The first puts statistics on the wrong side of the results-file
+boundary. The second is a second implementation of the thing under test.
+
+---
+
+## 2026-09-30 — The numbers, regenerated from the archive: 925 wins, ≥90.7%
+
+**Status:** firm (a measurement). Adds `analysis/gypsy_numbers.py`, whose
+recorded output is `docs/results/gypsy-numbers-20260930.txt`. The inputs are
+Gizmo's archive (`docs/results/ARCHIVE-20260928.md`, all 28 SHA-256s checked
+against the manifest), plus two files made here.
+
+### The merge, stated once
+
+A verdict belongs to a (seed, ruleset) pair, whatever budget found it. The
+merge is the union of decided verdicts, with the only sound carries: a
+restricted win is a full win, and a full refutation is a restricted one. Two
+decided verdicts that disagree stop the script. **None do**, across every run
+on seeds 0–4999.
+
+### What it corrects
+
+- **Full game, seeds 0–999: 925 solvable, 1 unsolvable, 74 unknown, so
+  winnable ≥90.7% (Wilson 95%).** It was 924 and ≥90.6%. The 2026-09-25 entry
+  left the contiguous 12M run out of the merge and flagged that it might add up
+  to three. It adds one, seed 272.
+- Restricted arm on the same merge: 918, 1, 81, ≥89.9%.
+- Klondike, the budget curve (232/211, 125/115, 93/82), the five refutations,
+  and the ≤99.96% upper bound all reproduce as recorded.
+
+### A gap the archive exposed, closed
+
+**The worry-back null rested on three runs no file recorded.** The full-arm
+refutations of seeds 188, 3966 and 4260 were run in Claude sessions on
+2026-09-20 and 2026-09-23 and only written into this log. The archived
+contiguous file has all three full-arm results as `unknown`. They were re-run
+here at `9dbe4c8`: contiguous, both arms, a 200M budget and a 2,048 MiB table.
+The result is `docs/results/gypsy-both-200M-refutations-contiguous.jsonl`, with
+3796 and 4617 included so that one file holds all five.
+
+| Seed | restricted | full |
+|---:|---:|---:|
+| 188 | 4,203,474 | 19,801,449 |
+| 3796 | 2,283,094 | 8,967,671 |
+| 3966 | 7,713,489 | 48,274,858 |
+| 4260 | 5,692,561 | 13,997,443 |
+| 4617 | 3,202 | 3,211 |
+
+All ten are `unsolvable` with no limit touched, and every count matches the one
+recorded except seed 3966's full arm, which is one node above the logged
+48,274,857. The table size of the original run was never recorded. Probe
+order depends on table capacity, so one node is in keeping with a different
+table, and the verdict is the same. **With these, the script finds no
+restricted-unsolvable deal whose full arm is unknown. The worry-back delta is
+zero, with no open candidates, from files alone.**
+
+### Face-up aces: the sample's shortfall doesn't matter
+
+`deal_stats --per-seed` now writes each deal's face-up and face-down ace count
+(`docs/results/opening-aces-seeds0-4999.jsonl`). The counts come from the real
+deal, so Python never re-deals.
+
+| face-up aces | deals | expected share | proved winnable |
+|---:|---:|---:|---:|
+| 0 | 263 | 25.0% | 89.0% |
+| 1 | 387 | 39.4% | 94.1% |
+| 2 | 275 | 25.2% | 92.7% |
+| 3 | 64 | 8.5% | 95.3% |
+| 4+ | 11 | 1.8% | 100% |
+
+Reweighting to the exact distribution moves proved-winnable from 92.5% to
+92.7%, **+0.17 points**. The sample leans toward harder deals, as expected,
+and by too little to matter. The bound stays as sampled, and the writeup can
+note the check in a sentence. The table above is a lower bound per stratum,
+not a winnability rate: 74 deals are unknown and may sit unevenly across ace
+counts. The 0-ace row is the only one that stands apart, and it is the
+starting point for the opening-card predictors in `DESIGN.md`.
+
+Rejected: shipping per-seed ace counts from a Python re-deal. That would be a
+second implementation of the deal.
