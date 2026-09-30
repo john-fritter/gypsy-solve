@@ -1,0 +1,2 @@
+{"game":"gypsy","seed":3796,"top_rank":13,"ruleset":"no-worry-back","verdict":"unsolvable","verdict_from":"search","limit":"none","nodes":2283094,"line_length":0,"elapsed_ms":8003,"node_budget":96000000,"max_depth":100000,"table_capacity":268435456,"table_filled":2283094,"restarts_used":1}
+{"game":"gypsy","seed":3796,"top_rank":13,"ruleset":"full","verdict":"unknown","verdict_from":"search","limit":"budget","nodes":96000000,"line_length":0,"elapsed_ms":230462,"node_budget":96000000,"max_depth":100000,"table_capacity":268435456,"table_filled":95939167,"restarts_used":1}
