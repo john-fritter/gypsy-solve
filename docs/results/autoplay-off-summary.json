@@ -1,0 +1,105 @@
+{
+  "seeds": {
+    "3796": {
+      "12000000": {
+        "full": {
+          "limit": "none",
+          "nodes": 8967671,
+          "table_capacity": 67108864,
+          "table_filled": 8967666,
+          "verdict": "unsolvable",
+          "verdict_from": "search"
+        },
+        "no-worry-back": {
+          "limit": "none",
+          "nodes": 0,
+          "table_capacity": 0,
+          "table_filled": 0,
+          "verdict": "unsolvable",
+          "verdict_from": "full"
+        }
+      },
+      "decided": true
+    },
+    "3966": {
+      "12000000": {
+        "no-worry-back": {
+          "limit": "budget",
+          "nodes": 12000000,
+          "table_capacity": 67108864,
+          "table_filled": 11999934,
+          "verdict": "unknown",
+          "verdict_from": "search"
+        }
+      },
+      "24000000": {
+        "no-worry-back": {
+          "limit": "budget",
+          "nodes": 24000000,
+          "table_capacity": 67108864,
+          "table_filled": 23984667,
+          "verdict": "unknown",
+          "verdict_from": "search"
+        }
+      },
+      "48000000": {
+        "no-worry-back": {
+          "limit": "budget",
+          "nodes": 48000000,
+          "table_capacity": 134217728,
+          "table_filled": 47969519,
+          "verdict": "unknown",
+          "verdict_from": "search"
+        }
+      },
+      "96000000": {
+        "no-worry-back": {
+          "limit": "none",
+          "nodes": 0,
+          "table_capacity": 0,
+          "table_filled": 0,
+          "verdict": "unsolvable",
+          "verdict_from": "full"
+        }
+      },
+      "decided": true
+    },
+    "4260": {
+      "12000000": {
+        "no-worry-back": {
+          "limit": "budget",
+          "nodes": 12000000,
+          "table_capacity": 67108864,
+          "table_filled": 11999942,
+          "verdict": "unknown",
+          "verdict_from": "search"
+        }
+      },
+      "24000000": {
+        "no-worry-back": {
+          "limit": "none",
+          "nodes": 0,
+          "table_capacity": 0,
+          "table_filled": 0,
+          "verdict": "unsolvable",
+          "verdict_from": "full"
+        }
+      },
+      "decided": true
+    },
+    "4617": {
+      "12000000": {
+        "full": {
+          "limit": "none",
+          "nodes": 3211,
+          "table_capacity": 67108864,
+          "table_filled": 3211,
+          "verdict": "unsolvable",
+          "verdict_from": "search"
+        }
+      },
+      "decided": true
+    }
+  },
+  "variant": "autoplay-off"
+}

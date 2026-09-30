@@ -1,0 +1,65 @@
+{
+  "seeds": {
+    "3796": {
+      "12000000": {
+        "full": {
+          "limit": "none",
+          "nodes": 9137528,
+          "table_capacity": 67108864,
+          "table_filled": 9137522,
+          "verdict": "unsolvable",
+          "verdict_from": "search"
+        },
+        "no-worry-back": {
+          "limit": "none",
+          "nodes": 2309711,
+          "table_capacity": 67108864,
+          "table_filled": 2309711,
+          "verdict": "unsolvable",
+          "verdict_from": "search"
+        }
+      },
+      "decided": true
+    },
+    "3966": {
+      "12000000": {
+        "no-worry-back": {
+          "limit": "none",
+          "nodes": 7732401,
+          "table_capacity": 67108864,
+          "table_filled": 7732401,
+          "verdict": "unsolvable",
+          "verdict_from": "search"
+        }
+      },
+      "decided": true
+    },
+    "4260": {
+      "12000000": {
+        "no-worry-back": {
+          "limit": "none",
+          "nodes": 6035037,
+          "table_capacity": 67108864,
+          "table_filled": 6035037,
+          "verdict": "unsolvable",
+          "verdict_from": "search"
+        }
+      },
+      "decided": true
+    },
+    "4617": {
+      "12000000": {
+        "full": {
+          "limit": "none",
+          "nodes": 3391,
+          "table_capacity": 67108864,
+          "table_filled": 3391,
+          "verdict": "unsolvable",
+          "verdict_from": "search"
+        }
+      },
+      "decided": true
+    }
+  },
+  "variant": "split-off"
+}
