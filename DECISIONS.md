@@ -3956,3 +3956,64 @@ starting point for the opening-card predictors in `DESIGN.md`.
 
 Rejected: shipping per-seed ace counts from a Python re-deal. That would be a
 second implementation of the deal.
+
+---
+
+## 2026-10-01 — The writeup is drafted; the all-rules-removed re-check is half done and goes to Gizmo
+
+**Status:** firm on the writeup's content; provisional on the re-check, which is
+running on fritter.lol.
+
+### The writeup
+
+`analysis/writeup.md` is the source. It quotes only figures that
+`analysis/gypsy_numbers.py` regenerates, and every one carries its sample and
+its sampling allowance. The order is the claim, then the ruleset, then the
+method, results and limits, and how to reproduce it. It is written for a
+reader who knows solitaire, not this repo.
+
+Choices that weren't obvious:
+
+- **The bound leads, and the upper end is called weak.** "At least 90.7%" is
+  the claim. 99.96% is printed only alongside why it says little.
+- **No guess about where in 90.7–99.96% the truth lies.** A draft said "most
+  likely in the upper part". Nothing measured supports that, so it was cut.
+- **The worry-back null is stated as a finding**, with the 33 one-sided
+  deals explained as budget, not evidence.
+- **Shortcut claims are scoped exactly.** The winnable count depends on no
+  shortcut. Unwinnable verdicts are checked with each shortcut removed in turn,
+  and with all of them removed at once only where that has finished.
+- **Face-up aces are in, as per-row lower bounds**, with the 0.17-point
+  reweighting check given in one sentence.
+
+### The re-check: every shortcut removed at once
+
+`rule_free` (added in this PR) solves a whole deal in `RulesOnly`, the
+rules-legal game that `forcing_audit` already verified against. The
+type moved into the solver crate so the two share one copy. The audit's output
+is unchanged: 60 control deals match the recorded run line for line.
+
+| Seed | arm | nodes | verdict |
+|---:|---|---:|---|
+| 4617 | full | 1,012,261 | `unsolvable` |
+| 3796 | full | 1,179,593,069 | `unsolvable`, 8 GiB table full, 41 min |
+| 3966 | no-worry-back | 121,461,148 | `unsolvable`, 3 min |
+| 188 | full | 1,076,602,384 | `unsolvable`, 2026-09-20, patched build, no file |
+
+Recorded in `docs/results/gypsy-rule-free-refutations.jsonl`, except seed 188,
+which was never written to a file.
+
+**The rest didn't fit here.** Seed 4260's full arm ran 1h45m on an 8 GiB table,
+and the container restarted under it. Its restricted arm ran 18 minutes before a
+second restart. A cloud session can't hold a job of many hours, so
+`docs/prompts/gypsy-rule-free-refutations.md` gives Gizmo four runs on
+fritter.lol: 4260 in both arms, 3966 in the full game, and 188 again, so that
+its result is on file. Only `solvable` would show a rule failing. `unknown` is
+inconclusive.
+
+**Why it is worth the box time.** Nothing in the bound depends on it: the
+winnable count is replayed lines. What depends on the five refutations is the
+99.96% upper end and the worry-back null, and each refutation already survives
+removing any one rule. The all-at-once run closes the remaining case, two rules
+interacting badly, at no cost in attention. The writeup says exactly which
+runs have finished, and it is updated when the rest report.

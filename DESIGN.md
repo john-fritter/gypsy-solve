@@ -333,7 +333,8 @@ budget-exhausted.
    `--resume` by seed, refusals on memory and free space, and `--both-arms` to
    solve each deal in both rulesets with each arm's proof carried to the other.
    The batch *runs* are still gated on the section below.
-9. Batch runs. Worry-back enabled. Analysis + writeup.
+9. Batch runs. Worry-back enabled. Analysis + writeup. **Writeup drafted
+   2026-10-01**, `analysis/writeup.md`, from `analysis/gypsy_numbers.py`.
 10. WASM front end, last.
 
 ### Where work resumes

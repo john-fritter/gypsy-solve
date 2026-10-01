@@ -19,9 +19,10 @@ Gypsy. It is a lower bound, not an estimate, and this page says why.
 | Deals where worry-back made the difference | 0 |
 
 Every winnable deal has a winning line that was replayed move by move from
-the deal. Every unwinnable one had its entire reachable game searched, and
-that search was repeated with all of the solver's shortcuts switched off. None
-of the headline figures depends on the solver's shortcuts being correct.
+the deal, so the winnable count does not depend on the solver's shortcuts
+being correct. Every unwinnable one had its entire reachable game searched.
+Each of those searches was repeated with each shortcut removed in turn, and
+for three of the five deals with all of them removed at once.
 
 ## The game
 
@@ -83,9 +84,9 @@ wrong for two decks, and it was removed. Another candidate was shown to be
 false and rejected. The two rules that force a move are also checked position
 by position against a search that uses no shortcuts at all.
 
-They matter for speed, not correctness. A win is a line replayed from the
-deal, whatever found it. And each of the five unwinnable deals was
-re-searched with every shortcut removed.
+They matter for speed. A win is a line replayed from the deal, whatever found
+it. An unwinnable verdict is where a wrong shortcut would show, so each of the
+five was searched again without the shortcuts (see below).
 
 **Restarts.** Gypsy wins are long plunges that a search either walks into
 early or misses. So most of the budget was spent as many short searches, each
@@ -149,16 +150,19 @@ too large to search to the end, and nothing measured tells how many of each.
 A long search of each of 5,000 deals proved five unwinnable: seeds **188,
 3796, 3966, 4260 and 4617**.
 
-| Seed | nodes to exhaust, with shortcuts | without any |
+| Seed | positions searched, with shortcuts | with no shortcuts at all |
 |---:|---:|---:|
 | 4617 | 3,211 | 1,012,261 |
-| 3796 | 8,967,671 | pending |
-| 4260 | 13,997,443 | pending |
+| 3796 | 8,967,671 | 1,179,593,069 |
+| 4260 | 13,997,443 | running |
 | 188 | 19,801,449 | 1,076,602,384 |
-| 3966 | 48,274,858 | pending |
+| 3966 | 48,274,858 | running (121,461,148 without worry-back) |
 
 Those counts are with worry-back allowed, and each deal is also unwinnable
-without it. Seed 4617 is stuck almost from the deal. The others are large, but
+without it. Every verdict survives removing each shortcut on its own. With all
+of them removed at once, the search has to cover tens or hundreds of times as
+many positions. Seeds 4617, 3796 and 188 stay unwinnable that way, and seed
+3966 does without worry-back. The rest is a job of many hours, and is running. Seed 4617 is stuck almost from the deal. The others are large, but
 far smaller than the hardest unknown deal examined, which was still finding
 almost entirely new positions after 100 million.
 
@@ -223,7 +227,8 @@ Everything is at
   cargo run --release --bin gypsy -- solve --seed 188 --no-worry-back --budget 12000000 --table-mib 1024
   ```
 
-- `cargo run --release --bin rule_free -- --seed 188` repeats a refutation with
-  every shortcut removed.
+- `cargo run --release --bin rule_free -- --seed 4617` repeats a refutation
+  with every shortcut removed. Seed 4617 takes seconds; the others take an hour
+  or more and an 8 GiB table.
 - `cargo run --release --bin deal_stats` and
   `analysis/shuffle_uniformity.py` repeat the shuffle checks.
