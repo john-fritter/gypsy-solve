@@ -53,51 +53,12 @@ use std::process::ExitCode;
 use gypsy_core::rng::SplitMix64;
 use gypsy_core::state::MIN_TOP_RANK;
 use gypsy_core::{Card, Move, MoveOptions, State, Suit};
-use gypsy_solver::{solve, Config, Game, Gypsy, Table, Verdict};
+use gypsy_solver::{solve, Config, Game, Gypsy, RulesOnly, Table, Verdict};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Rule {
     Shipped,
     LaggingPile,
-}
-
-/// The game with every dominance removed: all rules-legal moves, ordered
-/// foundation plays first and worry-backs last. The ordering discards
-/// nothing, so a verdict here trusts no pruning rule.
-struct Raw<'a> {
-    gypsy: &'a Gypsy,
-    options: MoveOptions,
-}
-
-impl Game for Raw<'_> {
-    type Position = State;
-    type Action = Move;
-
-    fn legal_actions(&self, position: &State, _salt: u64) -> Vec<Move> {
-        let mut moves = position.legal_moves(self.options);
-        moves.sort_by_key(|mv| match mv {
-            Move::ToFoundation { .. } => 0,
-            Move::Tableau { .. } => 1,
-            Move::Stock => 2,
-            Move::WorryBack { .. } => 3,
-        });
-        moves
-    }
-
-    fn apply(&self, position: &mut State, action: Move) -> Result<(), String> {
-        self.gypsy.apply(position, action)
-    }
-
-    fn is_won(&self, position: &State) -> bool {
-        self.gypsy.is_won(position)
-    }
-
-    /// The transposition key is not a dominance: two positions share it only
-    /// when they have the same future. Using the solver's keeps the
-    /// stock-gated canonicalisation it was proved with.
-    fn key(&self, position: &State) -> u128 {
-        self.gypsy.key(position)
-    }
 }
 
 /// The higher of the two foundation piles of a suit.
@@ -167,10 +128,7 @@ fn main() -> ExitCode {
     };
 
     let gypsy = Gypsy::new(settings.options);
-    let raw = Raw {
-        gypsy: &gypsy,
-        options: settings.options,
-    };
+    let raw = RulesOnly::new(settings.options);
     let mut total = Tally::default();
 
     for seed in settings.first..settings.first + settings.deals {

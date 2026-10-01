@@ -18,11 +18,13 @@
 
 mod game;
 mod gypsy;
+mod rules_only;
 mod search;
 mod table;
 
 pub use game::Game;
 pub use gypsy::Gypsy;
+pub use rules_only::RulesOnly;
 pub use search::{
     replay, solve, solve_restarting, Config, Limit, Report, UnverifiedSolution, Verdict,
 };
